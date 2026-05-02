@@ -302,18 +302,6 @@ def load_css():
         border: 1.5px solid {border_color} !important;
     }}
     
-    [data-testid="stExpander"] {{
-        background: {bg_secondary};
-        border: 1px solid {border_color};
-        border-radius: 12px;
-        box-shadow: {card_shadow};
-        margin-bottom: 14px;
-        overflow: hidden;
-        transition: all 0.3s ease;
-    }}
-    [data-testid="stExpander"]:hover {{
-        box-shadow: {hover_shadow};
-    }}
     .streamlit-expanderHeader {{
         font-weight: 600 !important;
         color: {text_primary} !important;
@@ -487,7 +475,6 @@ hr {{
         margin: 24px 0;
     }}
     
-`css
     /* Fix expander - hide only the icon text, keep title */
     [data-testid="stExpander"] summary > div > div:first-child > span:first-child {{
         font-size: 0 !important;
