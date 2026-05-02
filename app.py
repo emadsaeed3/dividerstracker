@@ -78,15 +78,57 @@ def load_css():
         color: {text_primary};
     }}
     
-    /* Clean header but keep sidebar toggle */
+    /* Clean header */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     .stDeployButton {{display: none;}}
-    [data-testid="stToolbar"] {{display: none;}}
-    [data-testid="stDecoration"] {{display: none;}}
     
     header[data-testid="stHeader"] {{
         background: transparent !important;
+    }}
+    
+    /* ========== SIDEBAR TOGGLE BUTTON - ALWAYS VISIBLE ========== */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"] {{
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
+        border-radius: 8px !important;
+        padding: 8px !important;
+        width: 40px !important;
+        height: 40px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.4) !important;
+        cursor: pointer !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"]:hover,
+    [data-testid="collapsedControl"]:hover {{
+        transform: scale(1.05) !important;
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.6) !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"] *,
+    [data-testid="collapsedControl"] * {{
+        font-size: 0 !important;
+        color: transparent !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"]::before,
+    [data-testid="collapsedControl"]::before {{
+        content: "☰" !important;
+        font-size: 22px !important;
+        color: white !important;
+        font-family: Arial, sans-serif !important;
+        font-weight: bold !important;
+        position: absolute !important;
     }}
     
     /* ========== SIDEBAR ========== */
@@ -490,53 +532,6 @@ def load_css():
         background: {border_color};
         margin: 24px 0;
     }}
-
-  /* Force show sidebar toggle - ALWAYS visible */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"] {{
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 999999 !important;
-        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
-        border-radius: 8px !important;
-        padding: 8px !important;
-        width: 40px !important;
-        height: 40px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.4) !important;
-        cursor: pointer !important;
-    }}
-    
-    [data-testid="stSidebarCollapsedControl"]:hover,
-    [data-testid="collapsedControl"]:hover {{
-        transform: scale(1.05) !important;
-        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.6) !important;
-    }}
-    
-    /* Hide the text inside and show icon */
-    [data-testid="stSidebarCollapsedControl"] span,
-    [data-testid="collapsedControl"] span,
-    [data-testid="stSidebarCollapsedControl"] *,
-    [data-testid="collapsedControl"] * {{
-        font-size: 0 !important;
-        color: transparent !important;
-    }}
-    
-    [data-testid="stSidebarCollapsedControl"]::before,
-    [data-testid="collapsedControl"]::before {{
-        content: "☰" !important;
-        font-size: 22px !important;
-        color: white !important;
-        font-family: Arial, sans-serif !important;
-        font-weight: bold !important;
-        position: absolute !important;
-    }}
-    
     </style>
     """, unsafe_allow_html=True)
 
@@ -737,7 +732,6 @@ if "Dashboard" in page:
 
     stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
 
-    # Summary Stats
     st.markdown('<div class="section-title">📌 Overview</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
@@ -745,7 +739,6 @@ if "Dashboard" in page:
     with c2:
         render_stat_card("Total Shipments", len(shipments_df), "card-shipments", "bi-truck")
 
-    # Stock cards
     st.markdown('<div class="section-title">📦 Vendor Stock</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -755,7 +748,6 @@ if "Dashboard" in page:
     with c3:
         render_stock_card('60D', stocks.get('60D', 0), threshold)
 
-    # Progress cards
     st.markdown('<div class="section-title">🎯 Required vs Shipped</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     req_shipped = {}
@@ -769,7 +761,6 @@ if "Dashboard" in page:
         with [c1, c2, c3][idx]:
             render_progress_card(dtype, required, shipped, gap)
 
-    # Charts
     st.markdown('<div class="section-title">📊 Analytics</div>', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     
