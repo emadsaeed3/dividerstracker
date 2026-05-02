@@ -615,8 +615,8 @@ def render_progress_card(dtype, required, shipped, gap):
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-/* ========== HIDE SIDEBAR COLLAPSE BUTTON COMPLETELY ========== */
+    
+ /* ========== HIDE SIDEBAR COLLAPSE BUTTON COMPLETELY ========== */
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="collapsedControl"],
     [data-testid="stSidebarCollapseButton"],
@@ -627,7 +627,6 @@ def render_progress_card(dtype, required, shipped, gap):
     }}
     
     /* ========== FIX MATERIAL ICONS SHOWING AS TEXT ========== */
-    /* Hide all material icon text everywhere */
     span.material-symbols-outlined,
     span.material-symbols-rounded,
     span.material-symbols-sharp,
@@ -640,20 +639,19 @@ def render_progress_card(dtype, required, shipped, gap):
         font-family: 'Material Symbols Outlined', 'Material Icons' !important;
         font-weight: normal !important;
         font-style: normal !important;
-        font-size: 20px;
-        display: inline-block;
-        line-height: 1;
-        text-transform: none;
-        letter-spacing: normal;
-        word-wrap: normal;
-        white-space: nowrap;
-        direction: ltr;
-        -webkit-font-feature-settings: 'liga';
-        -webkit-font-smoothing: antialiased;
-        font-feature-settings: 'liga';
+        font-size: 20px !important;
+        display: inline-block !important;
+        line-height: 1 !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        word-wrap: normal !important;
+        white-space: nowrap !important;
+        direction: ltr !important;
+        -webkit-font-feature-settings: 'liga' !important;
+        -webkit-font-smoothing: antialiased !important;
+        font-feature-settings: 'liga' !important;
     }}
     
-    /* Import Material Symbols font */
     @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
     @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
