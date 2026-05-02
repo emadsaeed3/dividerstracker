@@ -6,7 +6,6 @@ from io import BytesIO
 import openpyxl
 import plotly.graph_objects as go
 
-# Page config
 st.set_page_config(
     page_title="Dividers Tracker",
     page_icon="📦",
@@ -14,7 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Supabase connection
 @st.cache_resource
 def init_supabase():
     url = st.secrets["SUPABASE_URL"]
@@ -22,7 +20,6 @@ def init_supabase():
     return create_client(url, key)
 
 supabase = init_supabase()
-
 LOW_STOCK_THRESHOLD = 50
 
 if 'dark_mode' not in st.session_state:
@@ -91,28 +88,6 @@ def load_css():
     button[kind="headerNoPadding"] {{
         display: none !important;
         visibility: hidden !important;
-    }}
-    
-    span.material-symbols-outlined,
-    span.material-symbols-rounded,
-    span.material-symbols-sharp,
-    span.material-icons,
-    span.material-icons-outlined,
-    span.material-icons-round,
-    span.material-icons-sharp {{
-        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
-        font-weight: normal !important;
-        font-style: normal !important;
-        display: inline-block !important;
-        line-height: 1 !important;
-        text-transform: none !important;
-        letter-spacing: normal !important;
-        word-wrap: normal !important;
-        white-space: nowrap !important;
-        direction: ltr !important;
-        -webkit-font-feature-settings: 'liga' !important;
-        -webkit-font-smoothing: antialiased !important;
-        font-feature-settings: 'liga' !important;
     }}
     
     [data-testid="stSidebar"] {{
@@ -208,7 +183,7 @@ def load_css():
         border-radius: 14px;
         box-shadow: {card_shadow};
         border: 1px solid {border_color};
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s ease;
         overflow: hidden;
         position: relative;
     }}
@@ -244,7 +219,7 @@ def load_css():
         padding: 11px 24px;
         border-radius: 10px;
         font-weight: 600;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s ease;
         letter-spacing: 0.3px;
         font-size: 0.95rem;
     }}
@@ -286,7 +261,6 @@ def load_css():
         border: 1.5px solid {border_color} !important;
         padding: 11px 15px !important;
         font-size: 0.95rem !important;
-        transition: all 0.2s ease;
     }}
     .stTextInput > div > div > input:focus,
     .stNumberInput > div > div > input:focus,
@@ -302,14 +276,19 @@ def load_css():
         border: 1.5px solid {border_color} !important;
     }}
     
+    [data-testid="stExpander"] {{
+        background: {bg_secondary};
+        border: 1px solid {border_color};
+        border-radius: 12px;
+        box-shadow: {card_shadow};
+        margin-bottom: 14px;
+        overflow: hidden;
+    }}
     .streamlit-expanderHeader {{
         font-weight: 600 !important;
         color: {text_primary} !important;
         padding: 14px 18px !important;
         font-size: 1rem !important;
-    }}
-    .streamlit-expanderHeader:hover {{
-        background: rgba(52, 152, 219, 0.05);
     }}
     
     [data-testid="stForm"] {{
@@ -332,7 +311,6 @@ def load_css():
         font-weight: 600 !important;
         text-transform: uppercase;
         font-size: 0.8rem !important;
-        letter-spacing: 0.5px;
     }}
     
     [data-testid="stAlert"] {{
@@ -341,16 +319,6 @@ def load_css():
         font-weight: 500 !important;
         box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
         border-left: 5px solid !important;
-        animation: slideIn 0.4s ease;
-    }}
-    
-    @keyframes slideIn {{
-        from {{ opacity: 0; transform: translateX(-20px); }}
-        to {{ opacity: 1; transform: translateX(0); }}
-    }}
-    @keyframes fadeInUp {{
-        from {{ opacity: 0; transform: translateY(20px); }}
-        to {{ opacity: 1; transform: translateY(0); }}
     }}
     
     .stat-card {{
@@ -360,10 +328,9 @@ def load_css():
         box-shadow: {card_shadow};
         border: 1px solid {border_color};
         margin-bottom: 16px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s ease;
         position: relative;
         overflow: hidden;
-        animation: fadeInUp 0.5s ease;
     }}
     .stat-card:hover {{
         transform: translateY(-6px);
@@ -431,7 +398,6 @@ def load_css():
         font-weight: 600;
         font-size: 0.8rem;
         margin-top: 12px;
-        letter-spacing: 0.3px;
     }}
     .badge-danger {{ background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; }}
     .badge-warning {{ background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); color: white; }}
@@ -447,7 +413,7 @@ def load_css():
     .progress-fill {{
         height: 100%;
         border-radius: 20px;
-        transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: width 0.8s ease;
     }}
     
     .threshold-chip {{
@@ -458,7 +424,6 @@ def load_css():
         border-radius: 20px;
         font-size: 0.85rem;
         font-weight: 600;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }}
     
     ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
@@ -468,33 +433,54 @@ def load_css():
         border-radius: 10px;
     }}
     
-hr {{
+    hr {{
         border: none;
         height: 1px;
         background: {border_color};
         margin: 24px 0;
     }}
-    
-    /* Fix expander - hide only the icon text, keep title */
-    [data-testid="stExpander"] summary > div > div:first-child > span:first-child {{
-        font-size: 0 !important;
-        width: 0 !important;
-        overflow: hidden !important;
-    }}
-    
-    [data-testid="stExpander"] summary > div > div:first-child > span:first-child::before {{
-        content: "▶";
-        font-size: 12px;
-        color: #3498db;
-        display: inline-block;
-        width: 15px;
-    }}
-    
-    [data-testid="stExpander"] details[open] summary > div > div:first-child > span:first-child::before {{
-        content: "▼";
-    }}
-    
     </style>
+    
+    <script>
+    function removeArrowText() {{
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        const nodesToRemove = [];
+        let node;
+        while (node = walker.nextNode()) {{
+            const text = node.nodeValue;
+            if (text && (
+                text.includes('_arrow_right') || 
+                text.includes('_arrow_left') ||
+                text.includes('keyboard_double_arrow') ||
+                text.includes('keyboard_arrow') ||
+                text.trim() === 'keyboard_double_arrow_right' ||
+                text.trim() === 'keyboard_double_arrow_left' ||
+                text.trim() === 'arrow_right' ||
+                text.trim() === 'arrow_left'
+            )) {{
+                nodesToRemove.push(node);
+            }}
+        }}
+        nodesToRemove.forEach(n => {{
+            n.nodeValue = '';
+        }});
+    }}
+    
+    removeArrowText();
+    setInterval(removeArrowText, 100);
+    
+    const observer = new MutationObserver(removeArrowText);
+    observer.observe(document.body, {{ 
+        childList: true, 
+        subtree: true, 
+        characterData: true 
+    }});
+    </script>
     """
     st.markdown(css, unsafe_allow_html=True)
 
@@ -502,8 +488,6 @@ hr {{
 load_css()
 
 
-
-# ============ DATABASE FUNCTIONS ============
 def get_threshold():
     try:
         res = supabase.table('settings').select('*').eq('key', 'low_stock_threshold').execute()
@@ -560,9 +544,9 @@ def calculate_alerts():
 
         if stock < remaining_need:
             shortage = remaining_need - stock
-            alerts.append(('danger', f'🚨 **Critical!** {dtype} shortage: Need to order **{shortage}** more units from vendor'))
+            alerts.append(('danger', f'🚨 **Critical!** {dtype} shortage: Need to order **{shortage}** more units'))
         elif stock < threshold:
-            alerts.append(('warning', f'⚠️ **Low stock alert:** {dtype} has only **{stock}** units left. Consider contacting vendor'))
+            alerts.append(('warning', f'⚠️ **Low stock:** {dtype} has only **{stock}** units left'))
 
     return alerts
 
@@ -579,7 +563,6 @@ def render_stat_card(label, value, card_class, icon):
 
 def render_stock_card(dtype, qty, threshold):
     card_class = f"card-{dtype.lower()}"
-    
     if qty == 0:
         badge = '<span class="badge-stock badge-danger">❌ Out of Stock</span>'
     elif qty < threshold:
@@ -625,7 +608,6 @@ def render_progress_card(dtype, required, shipped, gap):
     """, unsafe_allow_html=True)
 
 
-# ============ SIDEBAR ============
 with st.sidebar:
     st.markdown("""
     <div style="text-align:center; padding: 10px 0 20px 0;">
@@ -659,19 +641,10 @@ with st.sidebar:
 
 def get_plotly_theme():
     if st.session_state.dark_mode:
-        return dict(
-            paper_bgcolor='#252932',
-            plot_bgcolor='#252932',
-            font=dict(color='#e4e6eb')
-        )
-    return dict(
-        paper_bgcolor='white',
-        plot_bgcolor='white',
-        font=dict(color='#2c3e50')
-    )
+        return dict(paper_bgcolor='#252932', plot_bgcolor='#252932', font=dict(color='#e4e6eb'))
+    return dict(paper_bgcolor='white', plot_bgcolor='white', font=dict(color='#2c3e50'))
 
 
-# ============ DASHBOARD ============
 if "Dashboard" in page:
     col_title, col_chip = st.columns([3, 1])
     with col_title:
@@ -691,7 +664,6 @@ if "Dashboard" in page:
     stocks_df = get_stocks()
     stores_df = get_stores()
     shipments_df = get_shipments()
-
     stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
 
     st.markdown('<div class="section-title">📌 Overview</div>', unsafe_allow_html=True)
@@ -729,53 +701,30 @@ if "Dashboard" in page:
     with c1:
         fig = go.Figure()
         types = ['30D', '40D', '60D']
-        fig.add_trace(go.Bar(name='Vendor Stock', x=types, 
-                             y=[stocks.get(t, 0) for t in types],
-                             marker_color='#3498db'))
-        fig.add_trace(go.Bar(name='Required', x=types,
-                             y=[req_shipped[t][0] for t in types],
-                             marker_color='#f39c12'))
-        fig.add_trace(go.Bar(name='Shipped', x=types,
-                             y=[req_shipped[t][1] for t in types],
-                             marker_color='#27ae60'))
-        fig.update_layout(
-            barmode='group',
-            height=380,
-            title=dict(text='<b>Stock Overview by Divider Type</b>', font=dict(size=16)),
-            margin=dict(t=50, b=40, l=40, r=20),
-            **get_plotly_theme()
-        )
+        fig.add_trace(go.Bar(name='Vendor Stock', x=types, y=[stocks.get(t, 0) for t in types], marker_color='#3498db'))
+        fig.add_trace(go.Bar(name='Required', x=types, y=[req_shipped[t][0] for t in types], marker_color='#f39c12'))
+        fig.add_trace(go.Bar(name='Shipped', x=types, y=[req_shipped[t][1] for t in types], marker_color='#27ae60'))
+        fig.update_layout(barmode='group', height=380, title=dict(text='<b>Stock Overview</b>', font=dict(size=16)), margin=dict(t=50, b=40, l=40, r=20), **get_plotly_theme())
         st.plotly_chart(fig, use_container_width=True)
     
     with c2:
         total = sum(stocks.get(t, 0) for t in types)
         if total > 0:
-            fig = go.Figure(data=[go.Pie(
-                labels=types,
-                values=[stocks.get(t, 0) for t in types],
-                hole=0.55,
-                marker=dict(colors=['#3498db', '#e67e22', '#9b59b6'])
-            )])
-            fig.update_layout(
-                height=380,
-                title=dict(text='<b>Stock Distribution</b>', font=dict(size=16)),
-                margin=dict(t=50, b=40, l=20, r=20),
-                **get_plotly_theme()
-            )
+            fig = go.Figure(data=[go.Pie(labels=types, values=[stocks.get(t, 0) for t in types], hole=0.55, marker=dict(colors=['#3498db', '#e67e22', '#9b59b6']))])
+            fig.update_layout(height=380, title=dict(text='<b>Stock Distribution</b>', font=dict(size=16)), margin=dict(t=50, b=40, l=20, r=20), **get_plotly_theme())
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("📊 No stock data to visualize yet.")
+            st.info("📊 No stock data yet.")
 
 
-# ============ STORES ============
 elif "Stores" in page:
     st.markdown("# 🏪 Stores Management")
 
     with st.expander("➕ **Add New Store**", expanded=False):
         with st.form("add_store", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            name = c1.text_input("Store Name *", placeholder="e.g., Smouha Store")
-            location = c2.text_input("Location", placeholder="e.g., Alexandria")
+            name = c1.text_input("Store Name *")
+            location = c2.text_input("Location")
             c1, c2, c3 = st.columns(3)
             r30 = c1.number_input("🔵 Required 30D", min_value=0, value=0)
             r40 = c2.number_input("🟠 Required 40D", min_value=0, value=0)
@@ -786,7 +735,7 @@ elif "Stores" in page:
                     'name': name, 'location': location,
                     'required_30d': r30, 'required_40d': r40, 'required_60d': r60
                 }).execute()
-                st.success(f"✅ Store '{name}' added successfully!")
+                st.success(f"✅ Store '{name}' added!")
                 st.rerun()
 
     st.markdown('<div class="section-title">📋 All Stores</div>', unsafe_allow_html=True)
@@ -820,7 +769,6 @@ elif "Stores" in page:
                         st.rerun()
 
 
-# ============ VENDOR STOCK ============
 elif "Vendor Stock" in page:
     st.markdown("# 📦 Vendor Stock Management")
 
@@ -829,13 +777,13 @@ elif "Vendor Stock" in page:
     with st.expander("⚙️ **Low Stock Threshold Settings**"):
         st.info(f"💡 Current threshold: **{threshold}** units")
         c1, c2 = st.columns([3, 1])
-        new_threshold = c1.number_input("Threshold (units)", min_value=0, value=threshold, label_visibility="collapsed")
+        new_threshold = c1.number_input("Threshold", min_value=0, value=threshold, label_visibility="collapsed")
         if c2.button("💾 Save"):
             set_threshold(new_threshold)
-            st.success(f"✅ Threshold updated to {new_threshold}")
+            st.success(f"✅ Updated to {new_threshold}")
             st.rerun()
 
-    st.markdown('<div class="section-title">📊 Current Stock Levels</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">📊 Current Stock</div>', unsafe_allow_html=True)
     stocks_df = get_stocks()
     stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
     
@@ -850,21 +798,20 @@ elif "Vendor Stock" in page:
     st.markdown('<div class="section-title">🔄 Update Stock</div>', unsafe_allow_html=True)
     with st.form("update_stock", clear_on_submit=True):
         c1, c2 = st.columns([1, 3])
-        dtype = c1.selectbox("Divider Type", ['30D', '40D', '60D'])
+        dtype = c1.selectbox("Type", ['30D', '40D', '60D'])
         qty = c2.number_input("New Quantity", min_value=0, value=0)
         note = st.text_input("Note (optional)")
-        if st.form_submit_button("🔄 Update Stock"):
+        if st.form_submit_button("🔄 Update"):
             res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
             old_qty = res.data[0]['quantity'] if res.data else 0
             supabase.table('vendor_stock').update({
-                'quantity': qty,
-                'last_updated': datetime.utcnow().isoformat()
+                'quantity': qty, 'last_updated': datetime.utcnow().isoformat()
             }).eq('divider_type', dtype).execute()
             supabase.table('stock_history').insert({
                 'divider_type': dtype, 'old_qty': old_qty, 'new_qty': qty,
                 'change': qty - old_qty, 'note': note
             }).execute()
-            st.success(f"✅ {dtype} stock updated!")
+            st.success(f"✅ {dtype} updated!")
             st.rerun()
 
     st.markdown('<div class="section-title">📜 Stock History</div>', unsafe_allow_html=True)
@@ -879,13 +826,12 @@ elif "Vendor Stock" in page:
         st.info("📭 No history yet.")
 
 
-# ============ SHIPMENTS ============
 elif "Shipments" in page:
     st.markdown("# 🚚 Shipments")
 
     stores_df = get_stores()
     if stores_df.empty:
-        st.warning("⚠️ Please add a store first.")
+        st.warning("⚠️ Add a store first.")
     else:
         with st.expander("➕ **Record New Shipment**", expanded=False):
             with st.form("add_shipment", clear_on_submit=True):
@@ -898,7 +844,7 @@ elif "Shipments" in page:
                 q40 = c2.number_input("🟠 Qty 40D", min_value=0, value=0)
                 q60 = c3.number_input("🟣 Qty 60D", min_value=0, value=0)
                 notes = st.text_area("📝 Notes")
-                if st.form_submit_button("💾 Record Shipment"):
+                if st.form_submit_button("💾 Record"):
                     store_id = store_options[selected]
                     supabase.table('shipments').insert({
                         'store_id': store_id, 'date': ship_date.isoformat(),
@@ -911,14 +857,13 @@ elif "Shipments" in page:
                                 old_qty = res.data[0]['quantity']
                                 new_qty = max(0, old_qty - qty)
                                 supabase.table('vendor_stock').update({
-                                    'quantity': new_qty,
-                                    'last_updated': datetime.utcnow().isoformat()
+                                    'quantity': new_qty, 'last_updated': datetime.utcnow().isoformat()
                                 }).eq('divider_type', dtype).execute()
                                 supabase.table('stock_history').insert({
                                     'divider_type': dtype, 'old_qty': old_qty, 'new_qty': new_qty,
                                     'change': -qty, 'note': f'Shipped to store #{store_id}'
                                 }).execute()
-                    st.success("✅ Shipment recorded!")
+                    st.success("✅ Recorded!")
                     st.rerun()
 
     st.markdown('<div class="section-title">📋 All Shipments</div>', unsafe_allow_html=True)
@@ -933,14 +878,13 @@ elif "Shipments" in page:
         st.markdown("---")
         c1, c2 = st.columns([1, 3])
         del_id = c1.number_input("Shipment ID", min_value=0, value=0)
-        if c2.button("🗑️ Delete Shipment"):
+        if c2.button("🗑️ Delete"):
             if del_id > 0:
                 supabase.table('shipments').delete().eq('id', del_id).execute()
-                st.warning(f"🗑️ Shipment #{del_id} deleted.")
+                st.warning(f"🗑️ Deleted #{del_id}")
                 st.rerun()
 
 
-# ============ REPORTS ============
 elif "Reports" in page:
     st.markdown("# 📈 Reports")
 
