@@ -487,29 +487,24 @@ hr {{
         margin: 24px 0;
     }}
     
-    /* Hide only the arrow icon in expander, keep text */
-    [data-testid="stExpander"] summary svg {{
-        display: none !important;
+`css
+    /* Fix expander - hide only the icon text, keep title */
+    [data-testid="stExpander"] summary > div > div:first-child > span:first-child {{
+        font-size: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
     }}
     
-    /* Hide material icon spans specifically */
-    [data-testid="stExpander"] summary span[class*="material"],
-    [data-testid="stExpander"] summary span[data-testid*="icon"] {{
-        display: none !important;
-    }}
-    
-    /* Add custom arrow */
-    [data-testid="stExpander"] summary::after {{
-        content: "▼";
+    [data-testid="stExpander"] summary > div > div:first-child > span:first-child::before {{
+        content: "▶";
+        font-size: 12px;
         color: #3498db;
-        font-size: 14px;
-        margin-left: auto;
-        padding-left: 10px;
-        transition: transform 0.3s ease;
+        display: inline-block;
+        width: 15px;
     }}
     
-    [data-testid="stExpander"] details[open] summary::after {{
-        content: "▲";
+    [data-testid="stExpander"] details[open] summary > div > div:first-child > span:first-child::before {{
+        content: "▼";
     }}
     
     </style>
