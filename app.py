@@ -1,306 +1,334 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
-from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
-import openpyxl
+```python
+import streamlit as st
+from supabase import create_client
+from datetime import datetime, date
+import pandas as pd
 from io import BytesIO
+import openpyxl
 
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = 'your-secret-key-change-this'
+# Page config
+st.set_page_config(page_title="Dividers Tracker", page_icon="📦", layout="wide")
 
-# Low stock threshold
+# Supabase connection
+@st.cache_resource
+def init_supabase():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_supabase()
+
 LOW_STOCK_THRESHOLD = 50
-
-db = SQLAlchemy(app)
-
-
-class Store(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    location = db.Column(db.String(200))
-    required_30d = db.Column(db.Integer, default=0)
-    required_40d = db.Column(db.Integer, default=0)
-    required_60d = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    shipments = db.relationship('Shipment', backref='store', lazy=True, cascade='all, delete-orphan')
-
-
-class VendorStock(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    divider_type = db.Column(db.String(10), unique=True, nullable=False)
-    quantity = db.Column(db.Integer, default=0)
-    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-class Shipment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    store_id = db.Column(db.Integer, db.ForeignKey('store.id'), nullable=False)
-    date = db.Column(db.Date, default=datetime.utcnow)
-    qty_30d = db.Column(db.Integer, default=0)
-    qty_40d = db.Column(db.Integer, default=0)
-    qty_60d = db.Column(db.Integer, default=0)
-    notes = db.Column(db.String(300))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-class StockHistory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.DateTime, default=datetime.utcnow)
-    divider_type = db.Column(db.String(10))
-    old_qty = db.Column(db.Integer)
-    new_qty = db.Column(db.Integer)
-    change = db.Column(db.Integer)
-    note = db.Column(db.String(200))
-
-
-class Settings(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(50), unique=True)
-    value = db.Column(db.String(200))
 
 
 def get_threshold():
-    s = Settings.query.filter_by(key='low_stock_threshold').first()
-    return int(s.value) if s else LOW_STOCK_THRESHOLD
+    res = supabase.table('settings').select('*').eq('key', 'low_stock_threshold').execute()
+    if res.data:
+        return int(res.data[0]['value'])
+    return LOW_STOCK_THRESHOLD
+
+
+def set_threshold(val):
+    existing = supabase.table('settings').select('*').eq('key', 'low_stock_threshold').execute()
+    if existing.data:
+        supabase.table('settings').update({'value': str(val)}).eq('key', 'low_stock_threshold').execute()
+    else:
+        supabase.table('settings').insert({'key': 'low_stock_threshold', 'value': str(val)}).execute()
+
+
+def get_stocks():
+    res = supabase.table('vendor_stock').select('*').execute()
+    return pd.DataFrame(res.data) if res.data else pd.DataFrame(columns=['divider_type', 'quantity'])
+
+
+def get_stores():
+    res = supabase.table('stores').select('*').order('name').execute()
+    return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+
+
+def get_shipments():
+    res = supabase.table('shipments').select('*, stores(name)').order('date', desc=True).execute()
+    if not res.data:
+        return pd.DataFrame()
+    df = pd.DataFrame(res.data)
+    df['store_name'] = df['stores'].apply(lambda x: x['name'] if x else 'Unknown')
+    return df
 
 
 def calculate_alerts():
-    """Calculate stock alerts and shortage warnings"""
     alerts = []
     threshold = get_threshold()
-    
-    stocks = {s.divider_type: s.quantity for s in VendorStock.query.all()}
-    stores = Store.query.all()
-    shipments = Shipment.query.all()
-    
+    stocks_df = get_stocks()
+    stores_df = get_stores()
+    shipments_df = get_shipments()
+
+    stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
+
     for dtype in ['30D', '40D', '60D']:
         stock = stocks.get(dtype, 0)
-        required = sum(getattr(s, f'required_{dtype.lower()}') for s in stores)
-        shipped = sum(getattr(s, f'qty_{dtype.lower()}') for s in shipments)
+        col = f'required_{dtype.lower()}'
+        ship_col = f'qty_{dtype.lower()}'
+        required = stores_df[col].sum() if not stores_df.empty else 0
+        shipped = shipments_df[ship_col].sum() if not shipments_df.empty else 0
         remaining_need = max(0, required - shipped)
-        
+
         if stock < remaining_need:
             shortage = remaining_need - stock
-            alerts.append({
-                'type': dtype,
-                'level': 'danger',
-                'message': f'Critical! {dtype} shortage: Need to order {shortage} more units from vendor',
-                'icon': 'exclamation-triangle-fill'
-            })
+            alerts.append(('danger', f'🚨 Critical! {dtype} shortage: Need to order {shortage} more units from vendor'))
         elif stock < threshold:
-            alerts.append({
-                'type': dtype,
-                'level': 'warning',
-                'message': f'Low stock alert: {dtype} has only {stock} units left. Consider contacting vendor',
-                'icon': 'exclamation-circle-fill'
-            })
-    
+            alerts.append(('warning', f'⚠️ Low stock alert: {dtype} has only {stock} units left. Consider contacting vendor'))
+
     return alerts
 
 
-@app.route('/')
-def dashboard():
-    stocks = {s.divider_type: s.quantity for s in VendorStock.query.all()}
-    stock_30d = stocks.get('30D', 0)
-    stock_40d = stocks.get('40D', 0)
-    stock_60d = stocks.get('60D', 0)
+# Sidebar navigation
+st.sidebar.title("📦 Dividers Tracker")
+page = st.sidebar.radio("Navigate", ["Dashboard", "Stores", "Vendor Stock", "Shipments", "Reports"])
 
-    stores = Store.query.all()
-    required_30d = sum(s.required_30d for s in stores)
-    required_40d = sum(s.required_40d for s in stores)
-    required_60d = sum(s.required_60d for s in stores)
-
-    shipments = Shipment.query.all()
-    shipped_30d = sum(s.qty_30d for s in shipments)
-    shipped_40d = sum(s.qty_40d for s in shipments)
-    shipped_60d = sum(s.qty_60d for s in shipments)
-
-    gap_30d = required_30d - shipped_30d
-    gap_40d = required_40d - shipped_40d
-    gap_60d = required_60d - shipped_60d
+# ============ DASHBOARD ============
+if page == "Dashboard":
+    st.title("📊 Dashboard")
 
     alerts = calculate_alerts()
-    threshold = get_threshold()
+    if alerts:
+        for level, msg in alerts:
+            if level == 'danger':
+                st.error(msg)
+            else:
+                st.warning(msg)
 
-    return render_template('dashboard.html',
-                           stock_30d=stock_30d, stock_40d=stock_40d, stock_60d=stock_60d,
-                           required_30d=required_30d, required_40d=required_40d, required_60d=required_60d,
-                           shipped_30d=shipped_30d, shipped_40d=shipped_40d, shipped_60d=shipped_60d,
-                           gap_30d=gap_30d, gap_40d=gap_40d, gap_60d=gap_60d,
-                           stores_count=len(stores), shipments_count=len(shipments),
-                           alerts=alerts, threshold=threshold)
+    stocks_df = get_stocks()
+    stores_df = get_stores()
+    shipments_df = get_shipments()
 
+    stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
 
-@app.route('/stores')
-def stores():
-    all_stores = Store.query.order_by(Store.name).all()
-    return render_template('stores.html', stores=all_stores)
+    st.subheader("📦 Vendor Stock")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("30D Stock", stocks.get('30D', 0))
+    c2.metric("40D Stock", stocks.get('40D', 0))
+    c3.metric("60D Stock", stocks.get('60D', 0))
 
+    st.subheader("🎯 Required vs Shipped")
+    for dtype in ['30D', '40D', '60D']:
+        col = f'required_{dtype.lower()}'
+        ship_col = f'qty_{dtype.lower()}'
+        required = stores_df[col].sum() if not stores_df.empty else 0
+        shipped = shipments_df[ship_col].sum() if not shipments_df.empty else 0
+        gap = required - shipped
 
-@app.route('/stores/add', methods=['POST'])
-def add_store():
-    name = request.form.get('name')
-    location = request.form.get('location')
-    r30 = int(request.form.get('required_30d') or 0)
-    r40 = int(request.form.get('required_40d') or 0)
-    r60 = int(request.form.get('required_60d') or 0)
-    store = Store(name=name, location=location, required_30d=r30, required_40d=r40, required_60d=r60)
-    db.session.add(store)
-    db.session.commit()
-    flash('Store added successfully!', 'success')
-    return redirect(url_for('stores'))
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"{dtype} Required", int(required))
+        c2.metric(f"{dtype} Shipped", int(shipped))
+        c3.metric(f"{dtype} Gap", int(gap), delta=f"{-gap}" if gap > 0 else "✓ Complete")
 
-
-@app.route('/stores/edit/<int:id>', methods=['POST'])
-def edit_store(id):
-    store = Store.query.get_or_404(id)
-    store.name = request.form.get('name')
-    store.location = request.form.get('location')
-    store.required_30d = int(request.form.get('required_30d') or 0)
-    store.required_40d = int(request.form.get('required_40d') or 0)
-    store.required_60d = int(request.form.get('required_60d') or 0)
-    db.session.commit()
-    flash('Store updated!', 'success')
-    return redirect(url_for('stores'))
+    st.subheader("📈 Summary")
+    c1, c2 = st.columns(2)
+    c1.metric("Total Stores", len(stores_df))
+    c2.metric("Total Shipments", len(shipments_df))
 
 
-@app.route('/stores/delete/<int:id>')
-def delete_store(id):
-    store = Store.query.get_or_404(id)
-    db.session.delete(store)
-    db.session.commit()
-    flash('Store deleted!', 'warning')
-    return redirect(url_for('stores'))
+# ============ STORES ============
+elif page == "Stores":
+    st.title("🏪 Stores Management")
 
+    with st.expander("➕ Add New Store", expanded=False):
+        with st.form("add_store"):
+            name = st.text_input("Store Name *")
+            location = st.text_input("Location")
+            c1, c2, c3 = st.columns(3)
+            r30 = c1.number_input("Required 30D", min_value=0, value=0)
+            r40 = c2.number_input("Required 40D", min_value=0, value=0)
+            r60 = c3.number_input("Required 60D", min_value=0, value=0)
+            submitted = st.form_submit_button("Add Store")
+            if submitted and name:
+                supabase.table('stores').insert({
+                    'name': name, 'location': location,
+                    'required_30d': r30, 'required_40d': r40, 'required_60d': r60
+                }).execute()
+                st.success(f"✅ Store '{name}' added!")
+                st.rerun()
 
-@app.route('/vendor-stock')
-def vendor_stock():
-    stocks = VendorStock.query.all()
-    history = StockHistory.query.order_by(StockHistory.date.desc()).limit(20).all()
-    threshold = get_threshold()
-    return render_template('vendor_stock.html', stocks=stocks, history=history, threshold=threshold)
-
-
-@app.route('/vendor-stock/update', methods=['POST'])
-def update_stock():
-    divider_type = request.form.get('divider_type')
-    new_qty = int(request.form.get('quantity') or 0)
-    note = request.form.get('note', '')
-    stock = VendorStock.query.filter_by(divider_type=divider_type).first()
-    old_qty = stock.quantity if stock else 0
-    if stock:
-        stock.quantity = new_qty
-        stock.last_updated = datetime.utcnow()
+    st.subheader("All Stores")
+    stores_df = get_stores()
+    if stores_df.empty:
+        st.info("No stores added yet.")
     else:
-        stock = VendorStock(divider_type=divider_type, quantity=new_qty)
-        db.session.add(stock)
-    history = StockHistory(divider_type=divider_type, old_qty=old_qty, new_qty=new_qty, change=new_qty - old_qty, note=note)
-    db.session.add(history)
-    db.session.commit()
-    flash(f'{divider_type} stock updated!', 'success')
-    return redirect(url_for('vendor_stock'))
+        for _, store in stores_df.iterrows():
+            with st.expander(f"🏪 {store['name']} - {store['location'] or 'N/A'}"):
+                with st.form(f"edit_{store['id']}"):
+                    name = st.text_input("Name", value=store['name'], key=f"n_{store['id']}")
+                    location = st.text_input("Location", value=store['location'] or '', key=f"l_{store['id']}")
+                    c1, c2, c3 = st.columns(3)
+                    r30 = c1.number_input("Required 30D", min_value=0, value=int(store['required_30d']), key=f"r30_{store['id']}")
+                    r40 = c2.number_input("Required 40D", min_value=0, value=int(store['required_40d']), key=f"r40_{store['id']}")
+                    r60 = c3.number_input("Required 60D", min_value=0, value=int(store['required_60d']), key=f"r60_{store['id']}")
+                    c1, c2 = st.columns(2)
+                    update = c1.form_submit_button("💾 Update")
+                    delete = c2.form_submit_button("🗑️ Delete")
+                    if update:
+                        supabase.table('stores').update({
+                            'name': name, 'location': location,
+                            'required_30d': r30, 'required_40d': r40, 'required_60d': r60
+                        }).eq('id', store['id']).execute()
+                        st.success("Updated!")
+                        st.rerun()
+                    if delete:
+                        supabase.table('stores').delete().eq('id', store['id']).execute()
+                        st.warning("Deleted!")
+                        st.rerun()
 
 
-@app.route('/settings/threshold', methods=['POST'])
-def update_threshold():
-    new_val = int(request.form.get('threshold') or 50)
-    s = Settings.query.filter_by(key='low_stock_threshold').first()
-    if s:
-        s.value = str(new_val)
+# ============ VENDOR STOCK ============
+elif page == "Vendor Stock":
+    st.title("📦 Vendor Stock Management")
+
+    threshold = get_threshold()
+    with st.expander("⚙️ Settings"):
+        new_threshold = st.number_input("Low Stock Threshold", min_value=0, value=threshold)
+        if st.button("Update Threshold"):
+            set_threshold(new_threshold)
+            st.success(f"Threshold updated to {new_threshold}")
+            st.rerun()
+
+    st.subheader("Current Stock")
+    stocks_df = get_stocks()
+    stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
+    c1, c2, c3 = st.columns(3)
+    c1.metric("30D", stocks.get('30D', 0))
+    c2.metric("40D", stocks.get('40D', 0))
+    c3.metric("60D", stocks.get('60D', 0))
+
+    st.subheader("🔄 Update Stock")
+    with st.form("update_stock"):
+        dtype = st.selectbox("Divider Type", ['30D', '40D', '60D'])
+        qty = st.number_input("New Quantity", min_value=0, value=0)
+        note = st.text_input("Note (optional)")
+        if st.form_submit_button("Update Stock"):
+            res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
+            old_qty = res.data[0]['quantity'] if res.data else 0
+            supabase.table('vendor_stock').update({
+                'quantity': qty,
+                'last_updated': datetime.utcnow().isoformat()
+            }).eq('divider_type', dtype).execute()
+            supabase.table('stock_history').insert({
+                'divider_type': dtype, 'old_qty': old_qty, 'new_qty': qty,
+                'change': qty - old_qty, 'note': note
+            }).execute()
+            st.success(f"{dtype} stock updated!")
+            st.rerun()
+
+    st.subheader("📜 Stock History (Last 20)")
+    res = supabase.table('stock_history').select('*').order('date', desc=True).limit(20).execute()
+    if res.data:
+        st.dataframe(pd.DataFrame(res.data), use_container_width=True)
     else:
-        s = Settings(key='low_stock_threshold', value=str(new_val))
-        db.session.add(s)
-    db.session.commit()
-    flash(f'Low stock threshold updated to {new_val}', 'success')
-    return redirect(url_for('vendor_stock'))
+        st.info("No history yet.")
 
 
-@app.route('/shipments')
-def shipments():
-    all_shipments = Shipment.query.order_by(Shipment.date.desc()).all()
-    all_stores = Store.query.order_by(Store.name).all()
-    return render_template('shipments.html', shipments=all_shipments, stores=all_stores)
+# ============ SHIPMENTS ============
+elif page == "Shipments":
+    st.title("🚚 Shipments")
+
+    stores_df = get_stores()
+    if stores_df.empty:
+        st.warning("⚠️ Add a store first before recording shipments.")
+    else:
+        with st.expander("➕ Record New Shipment", expanded=False):
+            with st.form("add_shipment"):
+                store_options = {f"{row['name']} ({row['location'] or 'N/A'})": row['id'] for _, row in stores_df.iterrows()}
+                selected = st.selectbox("Store", list(store_options.keys()))
+                ship_date = st.date_input("Date", value=date.today())
+                c1, c2, c3 = st.columns(3)
+                q30 = c1.number_input("Qty 30D", min_value=0, value=0)
+                q40 = c2.number_input("Qty 40D", min_value=0, value=0)
+                q60 = c3.number_input("Qty 60D", min_value=0, value=0)
+                notes = st.text_area("Notes")
+                if st.form_submit_button("Record Shipment"):
+                    store_id = store_options[selected]
+                    supabase.table('shipments').insert({
+                        'store_id': store_id, 'date': ship_date.isoformat(),
+                        'qty_30d': q30, 'qty_40d': q40, 'qty_60d': q60, 'notes': notes
+                    }).execute()
+                    # Update stock
+                    for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
+                        if qty > 0:
+                            res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
+                            if res.data:
+                                old_qty = res.data[0]['quantity']
+                                new_qty = max(0, old_qty - qty)
+                                supabase.table('vendor_stock').update({
+                                    'quantity': new_qty,
+                                    'last_updated': datetime.utcnow().isoformat()
+                                }).eq('divider_type', dtype).execute()
+                                supabase.table('stock_history').insert({
+                                    'divider_type': dtype, 'old_qty': old_qty, 'new_qty': new_qty,
+                                    'change': -qty, 'note': f'Shipped to store #{store_id}'
+                                }).execute()
+                    st.success("✅ Shipment recorded!")
+                    st.rerun()
+
+    st.subheader("All Shipments")
+    shipments_df = get_shipments()
+    if shipments_df.empty:
+        st.info("No shipments yet.")
+    else:
+        display_df = shipments_df[['id', 'store_name', 'date', 'qty_30d', 'qty_40d', 'qty_60d', 'notes']].copy()
+        display_df.columns = ['ID', 'Store', 'Date', '30D', '40D', '60D', 'Notes']
+        st.dataframe(display_df, use_container_width=True)
+
+        del_id = st.number_input("Shipment ID to Delete", min_value=0, value=0)
+        if st.button("🗑️ Delete Shipment"):
+            if del_id > 0:
+                supabase.table('shipments').delete().eq('id', del_id).execute()
+                st.warning(f"Shipment #{del_id} deleted.")
+                st.rerun()
 
 
-@app.route('/shipments/add', methods=['POST'])
-def add_shipment():
-    store_id = int(request.form.get('store_id'))
-    date_str = request.form.get('date')
-    date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
-    qty_30d = int(request.form.get('qty_30d') or 0)
-    qty_40d = int(request.form.get('qty_40d') or 0)
-    qty_60d = int(request.form.get('qty_60d') or 0)
-    notes = request.form.get('notes', '')
-    shipment = Shipment(store_id=store_id, date=date, qty_30d=qty_30d, qty_40d=qty_40d, qty_60d=qty_60d, notes=notes)
-    db.session.add(shipment)
-    for dtype, qty in [('30D', qty_30d), ('40D', qty_40d), ('60D', qty_60d)]:
-        if qty > 0:
-            stock = VendorStock.query.filter_by(divider_type=dtype).first()
-            if stock:
-                old_qty = stock.quantity
-                stock.quantity = max(0, stock.quantity - qty)
-                stock.last_updated = datetime.utcnow()
-                history = StockHistory(divider_type=dtype, old_qty=old_qty, new_qty=stock.quantity, change=-qty, note=f'Shipped to store #{store_id}')
-                db.session.add(history)
-    db.session.commit()
-    flash('Shipment recorded!', 'success')
-    return redirect(url_for('shipments'))
+# ============ REPORTS ============
+elif page == "Reports":
+    st.title("📊 Reports")
 
+    stores_df = get_stores()
+    shipments_df = get_shipments()
 
-@app.route('/shipments/delete/<int:id>')
-def delete_shipment(id):
-    shipment = Shipment.query.get_or_404(id)
-    db.session.delete(shipment)
-    db.session.commit()
-    flash('Shipment deleted!', 'warning')
-    return redirect(url_for('shipments'))
+    if stores_df.empty:
+        st.info("No data to display.")
+    else:
+        report_rows = []
+        for _, store in stores_df.iterrows():
+            store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else pd.DataFrame()
+            s30 = store_ships['qty_30d'].sum() if not store_ships.empty else 0
+            s40 = store_ships['qty_40d'].sum() if not store_ships.empty else 0
+            s60 = store_ships['qty_60d'].sum() if not store_ships.empty else 0
+            report_rows.append({
+                'Store': store['name'],
+                'Location': store['location'] or '',
+                'Required 30D': store['required_30d'],
+                'Shipped 30D': int(s30),
+                'Gap 30D': store['required_30d'] - int(s30),
+                'Required 40D': store['required_40d'],
+                'Shipped 40D': int(s40),
+                'Gap 40D': store['required_40d'] - int(s40),
+                'Required 60D': store['required_60d'],
+                'Shipped 60D': int(s60),
+                'Gap 60D': store['required_60d'] - int(s60),
+            })
+        report_df = pd.DataFrame(report_rows)
+        st.dataframe(report_df, use_container_width=True)
 
-
-@app.route('/reports')
-def reports():
-    stores = Store.query.all()
-    report_data = []
-    for store in stores:
-        shipped_30 = sum(s.qty_30d for s in store.shipments)
-        shipped_40 = sum(s.qty_40d for s in store.shipments)
-        shipped_60 = sum(s.qty_60d for s in store.shipments)
-        report_data.append({
-            'store': store,
-            'shipped_30': shipped_30, 'shipped_40': shipped_40, 'shipped_60': shipped_60,
-            'gap_30': store.required_30d - shipped_30,
-            'gap_40': store.required_40d - shipped_40,
-            'gap_60': store.required_60d - shipped_60,
-        })
-    return render_template('reports.html', report_data=report_data)
-
-
-@app.route('/reports/export')
-def export_excel():
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Stores Report"
-    ws.append(['Store', 'Location', 'Required 30D', 'Shipped 30D', 'Gap 30D', 'Required 40D', 'Shipped 40D', 'Gap 40D', 'Required 60D', 'Shipped 60D', 'Gap 60D'])
-    for store in Store.query.all():
-        s30 = sum(s.qty_30d for s in store.shipments)
-        s40 = sum(s.qty_40d for s in store.shipments)
-        s60 = sum(s.qty_60d for s in store.shipments)
-        ws.append([store.name, store.location or '', store.required_30d, s30, store.required_30d - s30, store.required_40d, s40, store.required_40d - s40, store.required_60d, s60, store.required_60d - s60])
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(output, as_attachment=True, download_name=f'dividers_report_{datetime.now().strftime("%Y%m%d")}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-
-def init_db():
-    with app.app_context():
-        db.create_all()
-        for dtype in ['30D', '40D', '60D']:
-            if not VendorStock.query.filter_by(divider_type=dtype).first():
-                db.session.add(VendorStock(divider_type=dtype, quantity=0))
-        db.session.commit()
-
-
-if __name__ == '__main__':
-    init_db()
-    app.run(debug=True)
+        output = BytesIO()
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Stores Report"
+        ws.append(list(report_df.columns))
+        for _, row in report_df.iterrows():
+            ws.append(list(row))
+        wb.save(output)
+        output.seek(0)
+        st.download_button(
+            label="📥 Download Excel Report",
+            data=output,
+            file_name=f"dividers_report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
