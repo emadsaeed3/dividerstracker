@@ -4,9 +4,16 @@ from datetime import datetime, date
 import pandas as pd
 from io import BytesIO
 import openpyxl
+import plotly.graph_objects as go
+import plotly.express as px
 
 # Page config
-st.set_page_config(page_title="Dividers Tracker", page_icon="📦", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="Dividers Tracker",
+    page_icon="📦",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # Supabase connection
 @st.cache_resource
@@ -19,7 +26,7 @@ supabase = init_supabase()
 
 LOW_STOCK_THRESHOLD = 50
 
-# Dark mode toggle
+# Initialize session state
 if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = False
 
@@ -33,280 +40,450 @@ def load_css():
         bg_secondary = "#252932"
         text_primary = "#e4e6eb"
         text_secondary = "#b0b3b8"
-        navbar_bg = "linear-gradient(90deg, #0d1117 0%, #161b22 100%)"
+        sidebar_bg = "linear-gradient(180deg, #0d1117 0%, #161b22 100%)"
         border_color = "#3a3f4b"
-        hover_bg = "#2d3139"
-        card_shadow = "0 2px 10px rgba(0,0,0,0.4)"
-        table_header_bg = "linear-gradient(90deg, #161b22 0%, #21262d 100%)"
+        card_shadow = "0 4px 20px rgba(0,0,0,0.4)"
+        hover_shadow = "0 12px 35px rgba(0,0,0,0.6)"
     else:
         bg_primary = "#f5f7fa"
         bg_secondary = "#ffffff"
         text_primary = "#2c3e50"
         text_secondary = "#7f8c8d"
-        navbar_bg = "linear-gradient(90deg, #1a2a3a 0%, #2c3e50 100%)"
+        sidebar_bg = "linear-gradient(180deg, #1a2a3a 0%, #2c3e50 100%)"
         border_color = "#ecf0f1"
-        hover_bg = "#f8f9fb"
-        card_shadow = "0 2px 10px rgba(0,0,0,0.06)"
-        table_header_bg = "linear-gradient(90deg, #2c3e50 0%, #34495e 100%)"
+        card_shadow = "0 4px 20px rgba(0,0,0,0.08)"
+        hover_shadow = "0 12px 35px rgba(0,0,0,0.15)"
     
     st.markdown(f"""
     <style>
-    * {{ font-family: 'Segoe UI', 'Tahoma', sans-serif; }}
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css');
     
+    * {{
+        font-family: 'Inter', 'Segoe UI', sans-serif !important;
+    }}
+    
+    /* App Background */
     .stApp {{
         background: {bg_primary};
+    }}
+    
+    .main .block-container {{
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: 1400px;
+    }}
+    
+    /* Text colors */
+    .stApp, .stApp p, .stApp label, .stApp span, .stMarkdown {{
         color: {text_primary};
     }}
     
-    /* Sidebar */
+    /* ========== SIDEBAR ========== */
     [data-testid="stSidebar"] {{
-        background: {navbar_bg};
+        background: {sidebar_bg};
+    }}
+    [data-testid="stSidebar"] > div:first-child {{
+        background: {sidebar_bg};
+        padding-top: 1rem;
     }}
     [data-testid="stSidebar"] * {{
         color: white !important;
     }}
-    [data-testid="stSidebar"] [role="radiogroup"] label {{
-        background: rgba(255,255,255,0.08);
-        padding: 10px 14px;
-        border-radius: 8px;
-        margin-bottom: 8px;
-        transition: all 0.3s ease;
+    [data-testid="stSidebar"] .stMarkdown h1 {{
         color: white !important;
+        font-size: 1.4rem !important;
+        padding-bottom: 0 !important;
+        border: none !important;
+        margin-bottom: 0 !important;
     }}
-    [data-testid="stSidebar"] [role="radiogroup"] label:hover {{
-        background: rgba(52, 152, 219, 0.3);
+    [data-testid="stSidebar"] .stMarkdown h1::after {{
+        display: none !important;
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] {{
+        gap: 8px;
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] > label {{
+        background: rgba(255,255,255,0.06);
+        padding: 12px 16px !important;
+        border-radius: 10px;
+        margin: 0 !important;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        border-left: 3px solid transparent;
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] > label:hover {{
+        background: rgba(52, 152, 219, 0.2);
+        border-left: 3px solid #3498db;
         transform: translateX(4px);
     }}
+    [data-testid="stSidebar"] [role="radiogroup"] > label[data-checked="true"] {{
+        background: linear-gradient(90deg, rgba(52, 152, 219, 0.3) 0%, rgba(52, 152, 219, 0.1) 100%);
+        border-left: 3px solid #3498db;
+    }}
+    [data-testid="stSidebar"] button {{
+        background: rgba(255,255,255,0.08) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        border-radius: 10px !important;
+        transition: all 0.3s ease;
+    }}
+    [data-testid="stSidebar"] button:hover {{
+        background: rgba(52, 152, 219, 0.3) !important;
+        border-color: #3498db !important;
+    }}
     
-    /* Main Title */
+    /* ========== TITLES ========== */
     h1 {{
-        color: {text_primary};
-        font-weight: 700;
+        color: {text_primary} !important;
+        font-weight: 800 !important;
+        font-size: 2rem !important;
         position: relative;
-        padding-bottom: 12px;
-        margin-bottom: 25px;
+        padding-bottom: 14px;
+        margin-bottom: 28px !important;
+        letter-spacing: -0.5px;
     }}
     h1::after {{
         content: '';
         position: absolute;
         bottom: 0;
         left: 0;
-        width: 80px;
+        width: 70px;
         height: 4px;
         background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
-        border-radius: 2px;
+        border-radius: 10px;
     }}
     
     h2, h3 {{
-        color: {text_primary};
-        font-weight: 600;
+        color: {text_primary} !important;
+        font-weight: 700 !important;
     }}
     
-    /* Metric cards */
+    .section-title {{
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: {text_primary};
+        margin: 25px 0 15px 0;
+        padding-left: 12px;
+        border-left: 4px solid #3498db;
+    }}
+    
+    /* ========== METRICS ========== */
     [data-testid="stMetric"] {{
         background: {bg_secondary};
-        padding: 20px;
-        border-radius: 12px;
+        padding: 22px;
+        border-radius: 14px;
         box-shadow: {card_shadow};
         border: 1px solid {border_color};
-        transition: all 0.3s ease;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+        position: relative;
     }}
     [data-testid="stMetric"]:hover {{
-        transform: translateY(-4px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        transform: translateY(-6px);
+        box-shadow: {hover_shadow};
+    }}
+    [data-testid="stMetric"]::before {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
     }}
     [data-testid="stMetricLabel"] {{
-        color: {text_secondary};
-        font-weight: 600;
-        font-size: 13px;
+        color: {text_secondary} !important;
+        font-weight: 600 !important;
+        font-size: 12px !important;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.2px;
     }}
     [data-testid="stMetricValue"] {{
-        color: {text_primary};
-        font-weight: 700;
-        font-size: 36px;
+        color: {text_primary} !important;
+        font-weight: 800 !important;
+        font-size: 38px !important;
+        line-height: 1.2 !important;
     }}
     
-    /* Buttons */
+    /* ========== BUTTONS ========== */
+    .stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {{
+        border: none;
+        padding: 11px 24px;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        letter-spacing: 0.3px;
+        font-size: 0.95rem;
+    }}
     .stButton > button {{
         background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-        color: white;
-        border: none;
-        padding: 10px 22px;
-        border-radius: 8px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+        color: white !important;
+        box-shadow: 0 4px 14px rgba(52, 152, 219, 0.35);
     }}
     .stButton > button:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 4px 14px rgba(52, 152, 219, 0.5);
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(52, 152, 219, 0.5);
     }}
-    
     .stFormSubmitButton > button {{
-        background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-        color: white;
-        border: none;
-        padding: 10px 22px;
-        border-radius: 8px;
-        font-weight: 600;
-        box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+        background: linear-gradient(135deg, #27ae60 0%, #229954 100%) !important;
+        color: white !important;
+        box-shadow: 0 4px 14px rgba(39, 174, 96, 0.35);
     }}
     .stFormSubmitButton > button:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 4px 14px rgba(39, 174, 96, 0.5);
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(39, 174, 96, 0.5);
     }}
-    
     .stDownloadButton > button {{
-        background: linear-gradient(135deg, #9b59b6 0%, #6c3483 100%);
-        color: white;
+        background: linear-gradient(135deg, #9b59b6 0%, #6c3483 100%) !important;
+        color: white !important;
+        box-shadow: 0 4px 14px rgba(155, 89, 182, 0.35);
+    }}
+    .stDownloadButton > button:hover {{
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(155, 89, 182, 0.5);
     }}
     
-    /* Inputs */
+    /* ========== INPUTS ========== */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stTextArea > div > div > textarea,
     .stDateInput > div > div > input {{
-        background: {bg_secondary};
-        color: {text_primary};
-        border-radius: 8px;
-        border: 1.5px solid {border_color};
-        padding: 10px 14px;
+        background: {bg_secondary} !important;
+        color: {text_primary} !important;
+        border-radius: 10px !important;
+        border: 1.5px solid {border_color} !important;
+        padding: 11px 15px !important;
+        font-size: 0.95rem !important;
+        transition: all 0.2s ease;
     }}
     .stTextInput > div > div > input:focus,
-    .stNumberInput > div > div > input:focus {{
-        border-color: #3498db;
-        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+    .stNumberInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus,
+    .stDateInput > div > div > input:focus {{
+        border-color: #3498db !important;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15) !important;
     }}
     
     .stSelectbox > div > div {{
-        background: {bg_secondary};
-        border-radius: 8px;
-        border: 1.5px solid {border_color};
+        background: {bg_secondary} !important;
+        border-radius: 10px !important;
+        border: 1.5px solid {border_color} !important;
     }}
     
-    /* Expander */
+    /* ========== EXPANDERS ========== */
     [data-testid="stExpander"] {{
         background: {bg_secondary};
         border: 1px solid {border_color};
         border-radius: 12px;
         box-shadow: {card_shadow};
-        margin-bottom: 12px;
-    }}
-    .streamlit-expanderHeader {{
-        font-weight: 600;
-        color: {text_primary};
-    }}
-    
-    /* Form */
-    [data-testid="stForm"] {{
-        background: {bg_secondary};
-        padding: 25px;
-        border-radius: 12px;
-        border: 1px solid {border_color};
-        box-shadow: {card_shadow};
-    }}
-    
-    /* DataFrame */
-    [data-testid="stDataFrame"] {{
-        border-radius: 10px;
+        margin-bottom: 14px;
         overflow: hidden;
-        box-shadow: {card_shadow};
-    }}
-    
-    /* Alerts */
-    [data-testid="stAlert"] {{
-        border-radius: 10px;
-        padding: 16px 20px;
-        font-weight: 500;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        border-left: 5px solid;
-    }}
-    
-    /* Hide Streamlit default items */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    
-    /* Custom divider cards */
-    .divider-card {{
-        background: {bg_secondary};
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid {border_color};
-        box-shadow: {card_shadow};
-        margin-bottom: 15px;
         transition: all 0.3s ease;
     }}
-    .divider-card:hover {{
-        transform: translateY(-4px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    [data-testid="stExpander"]:hover {{
+        box-shadow: {hover_shadow};
+    }}
+    .streamlit-expanderHeader {{
+        font-weight: 600 !important;
+        color: {text_primary} !important;
+        padding: 14px 18px !important;
+        font-size: 1rem !important;
+    }}
+    .streamlit-expanderHeader:hover {{
+        background: rgba(52, 152, 219, 0.05);
     }}
     
-    .divider-30d {{
+    /* ========== FORMS ========== */
+    [data-testid="stForm"] {{
+        background: {bg_secondary};
+        padding: 28px;
+        border-radius: 14px;
+        border: 1px solid {border_color};
+        box-shadow: {card_shadow};
+    }}
+    
+    /* ========== DATAFRAMES ========== */
+    [data-testid="stDataFrame"] {{
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: {card_shadow};
+        border: 1px solid {border_color};
+    }}
+    [data-testid="stDataFrame"] thead tr th {{
+        background: linear-gradient(90deg, #2c3e50 0%, #34495e 100%) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        text-transform: uppercase;
+        font-size: 0.8rem !important;
+        letter-spacing: 0.5px;
+    }}
+    
+    /* ========== ALERTS ========== */
+    [data-testid="stAlert"] {{
+        border-radius: 12px !important;
+        padding: 16px 22px !important;
+        font-weight: 500 !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+        border-left: 5px solid !important;
+        animation: slideIn 0.4s ease;
+    }}
+    
+    @keyframes slideIn {{
+        from {{ opacity: 0; transform: translateX(-20px); }}
+        to {{ opacity: 1; transform: translateX(0); }}
+    }}
+    @keyframes fadeInUp {{
+        from {{ opacity: 0; transform: translateY(20px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
+    }}
+    
+    /* Hide Streamlit branding */
+    #MainMenu, footer, header {{visibility: hidden;}}
+    .stDeployButton {{display: none;}}
+    
+    /* ========== CUSTOM CARDS ========== */
+    .stat-card {{
+        background: {bg_secondary};
+        padding: 24px;
+        border-radius: 14px;
+        box-shadow: {card_shadow};
+        border: 1px solid {border_color};
+        margin-bottom: 16px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+        animation: fadeInUp 0.5s ease;
+    }}
+    .stat-card:hover {{
+        transform: translateY(-6px);
+        box-shadow: {hover_shadow};
+    }}
+    .stat-card .icon-bg {{
+        position: absolute;
+        top: 12px;
+        right: 16px;
+        font-size: 3.5rem;
+        opacity: 0.12;
+    }}
+    .stat-card .stat-label {{
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: {text_secondary};
+        font-weight: 700;
+        margin-bottom: 8px;
+    }}
+    .stat-card .stat-value {{
+        font-size: 2.8rem;
+        font-weight: 800;
+        margin: 0;
+        line-height: 1.1;
+    }}
+    .stat-card .stat-sub {{
+        font-size: 0.85rem;
+        color: {text_secondary};
+        margin-top: 8px;
+    }}
+    
+    .card-30d {{
         border-left: 5px solid #3498db;
         background: linear-gradient(135deg, {bg_secondary} 0%, rgba(52, 152, 219, 0.08) 100%);
     }}
-    .divider-40d {{
+    .card-30d .icon-bg {{ color: #3498db; }}
+    .card-30d .stat-value {{ color: #3498db; }}
+    
+    .card-40d {{
         border-left: 5px solid #e67e22;
         background: linear-gradient(135deg, {bg_secondary} 0%, rgba(230, 126, 34, 0.08) 100%);
     }}
-    .divider-60d {{
+    .card-40d .icon-bg {{ color: #e67e22; }}
+    .card-40d .stat-value {{ color: #e67e22; }}
+    
+    .card-60d {{
         border-left: 5px solid #9b59b6;
         background: linear-gradient(135deg, {bg_secondary} 0%, rgba(155, 89, 182, 0.08) 100%);
     }}
+    .card-60d .icon-bg {{ color: #9b59b6; }}
+    .card-60d .stat-value {{ color: #9b59b6; }}
     
-    .divider-card h3 {{
-        margin: 0 0 8px 0;
-        font-size: 14px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        color: {text_secondary};
+    .card-stores {{
+        border-left: 5px solid #3498db;
     }}
-    .divider-card h1 {{
-        margin: 0;
-        font-size: 42px;
-        font-weight: 700;
-        padding: 0;
-        border: none;
+    .card-stores .icon-bg {{ color: #3498db; }}
+    .card-stores .stat-value {{ color: {text_primary}; }}
+    
+    .card-shipments {{
+        border-left: 5px solid #27ae60;
     }}
-    .divider-card h1::after {{ display: none; }}
+    .card-shipments .icon-bg {{ color: #27ae60; }}
+    .card-shipments .stat-value {{ color: {text_primary}; }}
     
-    .color-30d {{ color: #3498db !important; }}
-    .color-40d {{ color: #e67e22 !important; }}
-    .color-60d {{ color: #9b59b6 !important; }}
-    
-    .badge {{
+    /* Status Badges */
+    .badge-stock {{
         display: inline-block;
         padding: 6px 14px;
-        border-radius: 14px;
+        border-radius: 20px;
         font-weight: 600;
-        font-size: 13px;
-        margin-top: 10px;
+        font-size: 0.8rem;
+        margin-top: 12px;
+        letter-spacing: 0.3px;
     }}
-    .badge-danger {{ background: #e74c3c; color: white; }}
-    .badge-warning {{ background: #f39c12; color: white; }}
-    .badge-success {{ background: #27ae60; color: white; }}
+    .badge-danger {{ background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; }}
+    .badge-warning {{ background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); color: white; }}
+    .badge-success {{ background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; }}
     
-    /* Progress bar styling */
-    .custom-progress {{
+    /* Progress */
+    .progress-container {{
         background: {border_color};
-        border-radius: 10px;
+        border-radius: 20px;
         overflow: hidden;
         height: 10px;
-        margin-top: 10px;
+        margin-top: 12px;
     }}
-    .custom-progress-bar {{
+    .progress-fill {{
         height: 100%;
-        border-radius: 10px;
-        transition: width 0.5s ease;
+        border-radius: 20px;
+        transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        background-size: 20px 20px;
+        background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
+        animation: stripes 1s linear infinite;
+    }}
+    @keyframes stripes {{
+        from {{ background-position: 0 0; }}
+        to {{ background-position: 40px 0; }}
+    }}
+    
+    /* Threshold chip */
+    .threshold-chip {{
+        display: inline-block;
+        background: linear-gradient(135deg, #7f8c8d 0%, #636e72 100%);
+        color: white;
+        padding: 8px 18px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }}
     
     /* Scrollbar */
     ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
     ::-webkit-scrollbar-track {{ background: {bg_primary}; }}
-    ::-webkit-scrollbar-thumb {{ background: {text_secondary}; border-radius: 5px; }}
-    ::-webkit-scrollbar-thumb:hover {{ background: {text_primary}; }}
+    ::-webkit-scrollbar-thumb {{ 
+        background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
+        border-radius: 10px;
+    }}
+    ::-webkit-scrollbar-thumb:hover {{ 
+        background: linear-gradient(180deg, #2980b9 0%, #1f618d 100%);
+    }}
+    
+    /* Divider */
+    hr {{
+        border: none;
+        height: 1px;
+        background: {border_color};
+        margin: 24px 0;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -371,86 +548,127 @@ def calculate_alerts():
 
         if stock < remaining_need:
             shortage = remaining_need - stock
-            alerts.append(('danger', f'🚨 Critical! {dtype} shortage: Need to order {shortage} more units from vendor'))
+            alerts.append(('danger', f'🚨 **Critical!** {dtype} shortage: Need to order **{shortage}** more units from vendor'))
         elif stock < threshold:
-            alerts.append(('warning', f'⚠️ Low stock alert: {dtype} has only {stock} units left. Consider contacting vendor'))
+            alerts.append(('warning', f'⚠️ **Low stock alert:** {dtype} has only **{stock}** units left. Consider contacting vendor'))
 
     return alerts
 
 
-def divider_color(dtype):
-    return {'30D': '#3498db', '40D': '#e67e22', '60D': '#9b59b6'}.get(dtype, '#888')
+def render_stat_card(label, value, card_class, icon):
+    st.markdown(f"""
+    <div class="stat-card {card_class}">
+        <i class="bi {icon} icon-bg"></i>
+        <div class="stat-label">{label}</div>
+        <div class="stat-value">{value}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_stock_card(dtype, qty, threshold):
-    color_class = f"color-{dtype.lower()}"
-    div_class = f"divider-{dtype.lower()}"
+    card_class = f"card-{dtype.lower()}"
     
     if qty == 0:
-        badge = '<span class="badge badge-danger">❌ Out of Stock</span>'
+        badge = '<span class="badge-stock badge-danger">❌ Out of Stock</span>'
     elif qty < threshold:
-        badge = '<span class="badge badge-warning">⚠️ Low Stock</span>'
+        badge = '<span class="badge-stock badge-warning">⚠️ Low Stock</span>'
     else:
-        badge = '<span class="badge badge-success">✅ In Stock</span>'
+        badge = '<span class="badge-stock badge-success">✅ In Stock</span>'
     
     st.markdown(f"""
-    <div class="divider-card {div_class}">
-        <h3>{dtype} Stock</h3>
-        <h1 class="{color_class}">{qty}</h1>
+    <div class="stat-card {card_class}">
+        <i class="bi bi-box-seam icon-bg"></i>
+        <div class="stat-label">{dtype} Stock</div>
+        <div class="stat-value">{qty}</div>
         {badge}
     </div>
     """, unsafe_allow_html=True)
 
 
-def render_required_shipped_card(dtype, required, shipped, gap):
-    color = divider_color(dtype)
-    pct = (shipped / required * 100) if required > 0 else 0
-    pct = min(pct, 100)
+def render_progress_card(dtype, required, shipped, gap):
+    color_map = {'30D': '#3498db', '40D': '#e67e22', '60D': '#9b59b6'}
+    color = color_map[dtype]
+    pct = min((shipped / required * 100) if required > 0 else 0, 100)
     gap_color = "#e74c3c" if gap > 0 else "#27ae60"
+    gap_icon = "⚠️" if gap > 0 else "✅"
     
     st.markdown(f"""
-    <div class="divider-card divider-{dtype.lower()}">
-        <h3 class="color-{dtype.lower()}">{dtype}</h3>
-        <p style="margin: 5px 0;"><strong>Required:</strong> {required}</p>
-        <p style="margin: 5px 0;"><strong>Shipped:</strong> <span style="color:#27ae60">{shipped}</span></p>
-        <p style="margin: 5px 0;"><strong>Gap:</strong> <span style="color:{gap_color}">{gap}</span></p>
-        <div class="custom-progress">
-            <div class="custom-progress-bar" style="width:{pct}%; background:{color};"></div>
+    <div class="stat-card card-{dtype.lower()}">
+        <i class="bi bi-bar-chart-fill icon-bg"></i>
+        <div class="stat-label" style="color:{color};">{dtype} Progress</div>
+        <div style="margin-top: 12px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <span style="font-size:0.9rem;"><b>Required:</b> {required}</span>
+                <span style="font-size:0.9rem; color:#27ae60;"><b>Shipped:</b> {shipped}</span>
+            </div>
+            <div class="progress-container">
+                <div class="progress-fill" style="width:{pct}%; background:linear-gradient(90deg, {color} 0%, {color}dd 100%);"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:10px;">
+                <span style="font-size:0.85rem;">{pct:.0f}% complete</span>
+                <span style="font-weight:700; color:{gap_color};">{gap_icon} Gap: {gap}</span>
+            </div>
         </div>
-        <small style="color: #7f8c8d;">{pct:.0f}% completed</small>
     </div>
     """, unsafe_allow_html=True)
 
 
 # ============ SIDEBAR ============
-st.sidebar.markdown("# 📦 Dividers Tracker")
-st.sidebar.markdown("---")
+with st.sidebar:
+    st.markdown("""
+    <div style="text-align:center; padding: 10px 0 20px 0;">
+        <i class="bi bi-box-seam" style="font-size:2.5rem; color:#3498db;"></i>
+        <h1 style="margin:8px 0 0 0;">Dividers Tracker</h1>
+        <p style="font-size:0.8rem; opacity:0.7; margin:0;">Management Dashboard</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    page = st.radio("Navigation",
+        ["📊  Dashboard", "🏪  Stores", "📦  Vendor Stock", "🚚  Shipments", "📈  Reports"],
+        label_visibility="collapsed")
+    
+    st.markdown("---")
+    
+    # Dark mode toggle
+    dark_label = "☀️ Switch to Light" if st.session_state.dark_mode else "🌙 Switch to Dark"
+    if st.button(dark_label, use_container_width=True):
+        st.session_state.dark_mode = not st.session_state.dark_mode
+        st.rerun()
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align:center; font-size:0.75rem; opacity:0.6; padding:10px;">
+        <i class="bi bi-heart-fill" style="color:#e74c3c;"></i> Built with Streamlit<br>
+        © 2025
+    </div>
+    """, unsafe_allow_html=True)
 
-page = st.sidebar.radio("📍 Navigation", 
-    ["📊 Dashboard", "🏪 Stores", "📦 Vendor Stock", "🚚 Shipments", "📈 Reports"],
-    label_visibility="collapsed")
 
-st.sidebar.markdown("---")
-
-# Dark mode toggle
-dark_label = "☀️ Light Mode" if st.session_state.dark_mode else "🌙 Dark Mode"
-if st.sidebar.button(dark_label, use_container_width=True):
-    st.session_state.dark_mode = not st.session_state.dark_mode
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.caption("Dividers Tracker © 2025")
+# Get plotly theme
+def get_plotly_theme():
+    if st.session_state.dark_mode:
+        return dict(
+            paper_bgcolor='#252932',
+            plot_bgcolor='#252932',
+            font=dict(color='#e4e6eb')
+        )
+    return dict(
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        font=dict(color='#2c3e50')
+    )
 
 
 # ============ DASHBOARD ============
 if "Dashboard" in page:
-    st.title("📊 Dashboard")
-    
-    threshold = get_threshold()
-    
-    col_info, col_badge = st.columns([3, 1])
-    with col_badge:
-        st.markdown(f'<div style="text-align:right; padding-top:10px;"><span class="badge" style="background:#7f8c8d; color:white;">Threshold: {threshold} units</span></div>', unsafe_allow_html=True)
+    col_title, col_chip = st.columns([3, 1])
+    with col_title:
+        st.markdown("# 📊 Dashboard")
+    with col_chip:
+        threshold = get_threshold()
+        st.markdown(f'<div style="text-align:right; padding-top:12px;"><span class="threshold-chip">⚙️ Threshold: {threshold}</span></div>', unsafe_allow_html=True)
 
     alerts = calculate_alerts()
     if alerts:
@@ -466,12 +684,16 @@ if "Dashboard" in page:
 
     stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
 
-    # Summary stats
+    # Summary Stats
+    st.markdown('<div class="section-title">📌 Overview</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    c1.metric("🏪 Total Stores", len(stores_df))
-    c2.metric("🚚 Total Shipments", len(shipments_df))
+    with c1:
+        render_stat_card("Total Stores", len(stores_df), "card-stores", "bi-shop")
+    with c2:
+        render_stat_card("Total Shipments", len(shipments_df), "card-shipments", "bi-truck")
 
-    st.markdown("### 📦 Vendor Stock")
+    # Stock cards
+    st.markdown('<div class="section-title">📦 Vendor Stock</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
         render_stock_card('30D', stocks.get('30D', 0), threshold)
@@ -480,82 +702,109 @@ if "Dashboard" in page:
     with c3:
         render_stock_card('60D', stocks.get('60D', 0), threshold)
 
-    st.markdown("### 🎯 Required vs Shipped")
+    # Progress cards
+    st.markdown('<div class="section-title">🎯 Required vs Shipped</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
+    req_shipped = {}
     for idx, dtype in enumerate(['30D', '40D', '60D']):
         col = f'required_{dtype.lower()}'
         ship_col = f'qty_{dtype.lower()}'
         required = int(stores_df[col].sum()) if not stores_df.empty else 0
         shipped = int(shipments_df[ship_col].sum()) if not shipments_df.empty else 0
         gap = required - shipped
+        req_shipped[dtype] = (required, shipped, gap)
         with [c1, c2, c3][idx]:
-            render_required_shipped_card(dtype, required, shipped, gap)
+            render_progress_card(dtype, required, shipped, gap)
 
     # Charts
-    st.markdown("### 📈 Overview Charts")
+    st.markdown('<div class="section-title">📊 Analytics</div>', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
     
     with c1:
-        chart_data = pd.DataFrame({
-            'Type': ['30D', '40D', '60D'],
-            'Vendor Stock': [stocks.get('30D', 0), stocks.get('40D', 0), stocks.get('60D', 0)],
-            'Required': [
-                int(stores_df['required_30d'].sum()) if not stores_df.empty else 0,
-                int(stores_df['required_40d'].sum()) if not stores_df.empty else 0,
-                int(stores_df['required_60d'].sum()) if not stores_df.empty else 0,
-            ],
-            'Shipped': [
-                int(shipments_df['qty_30d'].sum()) if not shipments_df.empty else 0,
-                int(shipments_df['qty_40d'].sum()) if not shipments_df.empty else 0,
-                int(shipments_df['qty_60d'].sum()) if not shipments_df.empty else 0,
-            ]
-        })
-        st.bar_chart(chart_data.set_index('Type'), color=['#3498db', '#f39c12', '#27ae60'])
+        # Bar chart
+        fig = go.Figure()
+        types = ['30D', '40D', '60D']
+        fig.add_trace(go.Bar(name='Vendor Stock', x=types, 
+                             y=[stocks.get(t, 0) for t in types],
+                             marker_color='#3498db', marker_line_width=0))
+        fig.add_trace(go.Bar(name='Required', x=types,
+                             y=[req_shipped[t][0] for t in types],
+                             marker_color='#f39c12', marker_line_width=0))
+        fig.add_trace(go.Bar(name='Shipped', x=types,
+                             y=[req_shipped[t][1] for t in types],
+                             marker_color='#27ae60', marker_line_width=0))
+        fig.update_layout(
+            barmode='group',
+            height=380,
+            title=dict(text='<b>Stock Overview by Divider Type</b>', font=dict(size=16)),
+            margin=dict(t=50, b=40, l=40, r=20),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+            **get_plotly_theme()
+        )
+        fig.update_xaxes(showgrid=False)
+        fig.update_yaxes(gridcolor='rgba(128,128,128,0.2)')
+        st.plotly_chart(fig, use_container_width=True)
     
     with c2:
-        pie_data = pd.DataFrame({
-            'Type': ['30D', '40D', '60D'],
-            'Stock': [stocks.get('30D', 0), stocks.get('40D', 0), stocks.get('60D', 0)]
-        })
-        st.markdown("**Stock Distribution**")
-        st.dataframe(pie_data, use_container_width=True, hide_index=True)
+        # Donut chart
+        total = sum(stocks.get(t, 0) for t in types)
+        if total > 0:
+            fig = go.Figure(data=[go.Pie(
+                labels=types,
+                values=[stocks.get(t, 0) for t in types],
+                hole=0.55,
+                marker=dict(colors=['#3498db', '#e67e22', '#9b59b6'], line=dict(color='white', width=3))
+            )])
+            fig.update_layout(
+                height=380,
+                title=dict(text='<b>Stock Distribution</b>', font=dict(size=16)),
+                margin=dict(t=50, b=40, l=20, r=20),
+                showlegend=True,
+                legend=dict(orientation='h', yanchor='bottom', y=-0.1, xanchor='center', x=0.5),
+                **get_plotly_theme()
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("📊 No stock data to visualize yet.")
 
 
 # ============ STORES ============
 elif "Stores" in page:
-    st.title("🏪 Stores Management")
+    st.markdown("# 🏪 Stores Management")
 
-    with st.expander("➕ Add New Store", expanded=False):
-        with st.form("add_store"):
-            name = st.text_input("Store Name *")
-            location = st.text_input("Location")
+    with st.expander("➕ **Add New Store**", expanded=False):
+        with st.form("add_store", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            name = c1.text_input("Store Name *", placeholder="e.g., Smouha Store")
+            location = c2.text_input("Location", placeholder="e.g., Alexandria")
             c1, c2, c3 = st.columns(3)
-            r30 = c1.number_input("Required 30D 🔵", min_value=0, value=0)
-            r40 = c2.number_input("Required 40D 🟠", min_value=0, value=0)
-            r60 = c3.number_input("Required 60D 🟣", min_value=0, value=0)
+            r30 = c1.number_input("🔵 Required 30D", min_value=0, value=0)
+            r40 = c2.number_input("🟠 Required 40D", min_value=0, value=0)
+            r60 = c3.number_input("🟣 Required 60D", min_value=0, value=0)
             submitted = st.form_submit_button("➕ Add Store")
             if submitted and name:
                 supabase.table('stores').insert({
                     'name': name, 'location': location,
                     'required_30d': r30, 'required_40d': r40, 'required_60d': r60
                 }).execute()
-                st.success(f"✅ Store '{name}' added!")
+                st.success(f"✅ Store '{name}' added successfully!")
                 st.rerun()
 
-    st.markdown("### All Stores")
+    st.markdown('<div class="section-title">📋 All Stores</div>', unsafe_allow_html=True)
     stores_df = get_stores()
     if stores_df.empty:
-        st.info("📭 No stores added yet. Add your first store above!")
+        st.info("📭 No stores added yet. Click '**Add New Store**' above to start!")
     else:
         for _, store in stores_df.iterrows():
-            with st.expander(f"🏪 **{store['name']}** — {store['location'] or 'N/A'}"):
+            with st.expander(f"🏪 **{store['name']}** — 📍 {store['location'] or 'N/A'}"):
                 with st.form(f"edit_{store['id']}"):
-                    name = st.text_input("Name", value=store['name'], key=f"n_{store['id']}")
-                    location = st.text_input("Location", value=store['location'] or '', key=f"l_{store['id']}")
+                    c1, c2 = st.columns(2)
+                    name = c1.text_input("Name", value=store['name'], key=f"n_{store['id']}")
+                    location = c2.text_input("Location", value=store['location'] or '', key=f"l_{store['id']}")
                     c1, c2, c3 = st.columns(3)
-                    r30 = c1.number_input("Required 30D 🔵", min_value=0, value=int(store['required_30d']), key=f"r30_{store['id']}")
-                    r40 = c2.number_input("Required 40D 🟠", min_value=0, value=int(store['required_40d']), key=f"r40_{store['id']}")
-                    r60 = c3.number_input("Required 60D 🟣", min_value=0, value=int(store['required_60d']), key=f"r60_{store['id']}")
+                    r30 = c1.number_input("🔵 Required 30D", min_value=0, value=int(store['required_30d']), key=f"r30_{store['id']}")
+                    r40 = c2.number_input("🟠 Required 40D", min_value=0, value=int(store['required_40d']), key=f"r40_{store['id']}")
+                    r60 = c3.number_input("🟣 Required 60D", min_value=0, value=int(store['required_60d']), key=f"r60_{store['id']}")
                     c1, c2 = st.columns(2)
                     update = c1.form_submit_button("💾 Update")
                     delete = c2.form_submit_button("🗑️ Delete")
@@ -564,29 +813,30 @@ elif "Stores" in page:
                             'name': name, 'location': location,
                             'required_30d': r30, 'required_40d': r40, 'required_60d': r60
                         }).eq('id', store['id']).execute()
-                        st.success("✅ Updated!")
+                        st.success("✅ Updated successfully!")
                         st.rerun()
                     if delete:
                         supabase.table('stores').delete().eq('id', store['id']).execute()
-                        st.warning("🗑️ Deleted!")
+                        st.warning("🗑️ Store deleted!")
                         st.rerun()
 
 
 # ============ VENDOR STOCK ============
 elif "Vendor Stock" in page:
-    st.title("📦 Vendor Stock Management")
+    st.markdown("# 📦 Vendor Stock Management")
 
     threshold = get_threshold()
     
-    with st.expander("⚙️ Settings - Low Stock Threshold"):
-        st.info(f"💡 You'll get warnings when stock goes below this number (currently: **{threshold}**)")
-        new_threshold = st.number_input("Threshold (units)", min_value=0, value=threshold)
-        if st.button("💾 Update Threshold"):
+    with st.expander("⚙️ **Low Stock Threshold Settings**"):
+        st.info(f"💡 You'll be alerted when stock drops below this value. Current: **{threshold}** units")
+        c1, c2 = st.columns([3, 1])
+        new_threshold = c1.number_input("Threshold (units)", min_value=0, value=threshold, label_visibility="collapsed")
+        if c2.button("💾 Save"):
             set_threshold(new_threshold)
             st.success(f"✅ Threshold updated to {new_threshold}")
             st.rerun()
 
-    st.markdown("### Current Stock")
+    st.markdown('<div class="section-title">📊 Current Stock Levels</div>', unsafe_allow_html=True)
     stocks_df = get_stocks()
     stocks = dict(zip(stocks_df['divider_type'], stocks_df['quantity'])) if not stocks_df.empty else {}
     
@@ -598,12 +848,12 @@ elif "Vendor Stock" in page:
     with c3:
         render_stock_card('60D', stocks.get('60D', 0), threshold)
 
-    st.markdown("### 🔄 Update Stock")
-    with st.form("update_stock"):
+    st.markdown('<div class="section-title">🔄 Update Stock</div>', unsafe_allow_html=True)
+    with st.form("update_stock", clear_on_submit=True):
         c1, c2 = st.columns([1, 3])
         dtype = c1.selectbox("Divider Type", ['30D', '40D', '60D'])
         qty = c2.number_input("New Quantity", min_value=0, value=0)
-        note = st.text_input("Note (optional)")
+        note = st.text_input("Note (optional)", placeholder="e.g., New shipment from vendor")
         if st.form_submit_button("🔄 Update Stock"):
             res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
             old_qty = res.data[0]['quantity'] if res.data else 0
@@ -618,12 +868,13 @@ elif "Vendor Stock" in page:
             st.success(f"✅ {dtype} stock updated!")
             st.rerun()
 
-    st.markdown("### 📜 Stock History (Last 20)")
+    st.markdown('<div class="section-title">📜 Stock History (Last 20)</div>', unsafe_allow_html=True)
     res = supabase.table('stock_history').select('*').order('date', desc=True).limit(20).execute()
     if res.data:
         hist_df = pd.DataFrame(res.data)
         hist_df = hist_df[['date', 'divider_type', 'old_qty', 'new_qty', 'change', 'note']]
         hist_df.columns = ['Date', 'Type', 'Old Qty', 'New Qty', 'Change', 'Note']
+        hist_df['Date'] = pd.to_datetime(hist_df['Date']).dt.strftime('%Y-%m-%d %H:%M')
         st.dataframe(hist_df, use_container_width=True, hide_index=True)
     else:
         st.info("📭 No history yet.")
@@ -631,22 +882,23 @@ elif "Vendor Stock" in page:
 
 # ============ SHIPMENTS ============
 elif "Shipments" in page:
-    st.title("🚚 Shipments")
+    st.markdown("# 🚚 Shipments")
 
     stores_df = get_stores()
     if stores_df.empty:
-        st.warning("⚠️ Add a store first before recording shipments.")
+        st.warning("⚠️ Please add a store first before recording shipments.")
     else:
-        with st.expander("➕ Record New Shipment", expanded=False):
-            with st.form("add_shipment"):
+        with st.expander("➕ **Record New Shipment**", expanded=False):
+            with st.form("add_shipment", clear_on_submit=True):
                 store_options = {f"{row['name']} ({row['location'] or 'N/A'})": row['id'] for _, row in stores_df.iterrows()}
-                selected = st.selectbox("Store", list(store_options.keys()))
-                ship_date = st.date_input("Date", value=date.today())
+                c1, c2 = st.columns(2)
+                selected = c1.selectbox("🏪 Store", list(store_options.keys()))
+                ship_date = c2.date_input("📅 Date", value=date.today())
                 c1, c2, c3 = st.columns(3)
-                q30 = c1.number_input("Qty 30D 🔵", min_value=0, value=0)
-                q40 = c2.number_input("Qty 40D 🟠", min_value=0, value=0)
-                q60 = c3.number_input("Qty 60D 🟣", min_value=0, value=0)
-                notes = st.text_area("Notes")
+                q30 = c1.number_input("🔵 Qty 30D", min_value=0, value=0)
+                q40 = c2.number_input("🟠 Qty 40D", min_value=0, value=0)
+                q60 = c3.number_input("🟣 Qty 60D", min_value=0, value=0)
+                notes = st.text_area("📝 Notes", placeholder="Any additional notes...")
                 if st.form_submit_button("💾 Record Shipment"):
                     store_id = store_options[selected]
                     supabase.table('shipments').insert({
@@ -667,20 +919,21 @@ elif "Shipments" in page:
                                     'divider_type': dtype, 'old_qty': old_qty, 'new_qty': new_qty,
                                     'change': -qty, 'note': f'Shipped to store #{store_id}'
                                 }).execute()
-                    st.success("✅ Shipment recorded!")
+                    st.success("✅ Shipment recorded successfully!")
                     st.rerun()
 
-    st.markdown("### All Shipments")
+    st.markdown('<div class="section-title">📋 All Shipments</div>', unsafe_allow_html=True)
     shipments_df = get_shipments()
     if shipments_df.empty:
-        st.info("📭 No shipments yet.")
+        st.info("📭 No shipments recorded yet.")
     else:
         display_df = shipments_df[['id', 'store_name', 'date', 'qty_30d', 'qty_40d', 'qty_60d', 'notes']].copy()
-        display_df.columns = ['ID', 'Store', 'Date', '30D 🔵', '40D 🟠', '60D 🟣', 'Notes']
+        display_df.columns = ['ID', '🏪 Store', '📅 Date', '🔵 30D', '🟠 40D', '🟣 60D', '📝 Notes']
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
+        st.markdown("---")
         c1, c2 = st.columns([1, 3])
-        del_id = c1.number_input("Shipment ID to Delete", min_value=0, value=0)
+        del_id = c1.number_input("Shipment ID", min_value=0, value=0)
         if c2.button("🗑️ Delete Shipment"):
             if del_id > 0:
                 supabase.table('shipments').delete().eq('id', del_id).execute()
@@ -690,13 +943,13 @@ elif "Shipments" in page:
 
 # ============ REPORTS ============
 elif "Reports" in page:
-    st.title("📈 Reports")
+    st.markdown("# 📈 Reports")
 
     stores_df = get_stores()
     shipments_df = get_shipments()
 
     if stores_df.empty:
-        st.info("📭 No data to display.")
+        st.info("📭 No data to display. Add stores and shipments first.")
     else:
         report_rows = []
         for _, store in stores_df.iterrows():
@@ -706,7 +959,7 @@ elif "Reports" in page:
             s60 = store_ships['qty_60d'].sum() if not store_ships.empty else 0
             report_rows.append({
                 'Store': store['name'],
-                'Location': store['location'] or '',
+                'Location': store['location'] or '-',
                 'Req 30D': store['required_30d'],
                 'Ship 30D': int(s30),
                 'Gap 30D': store['required_30d'] - int(s30),
@@ -718,19 +971,38 @@ elif "Reports" in page:
                 'Gap 60D': store['required_60d'] - int(s60),
             })
         report_df = pd.DataFrame(report_rows)
+
+        # Summary metrics
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            render_stat_card("Total Stores", len(report_df), "card-stores", "bi-shop")
+        with c2:
+            total_req = report_df[['Req 30D', 'Req 40D', 'Req 60D']].sum().sum()
+            render_stat_card("Total Required", int(total_req), "card-30d", "bi-clipboard-check")
+        with c3:
+            total_ship = report_df[['Ship 30D', 'Ship 40D', 'Ship 60D']].sum().sum()
+            render_stat_card("Total Shipped", int(total_ship), "card-shipments", "bi-truck")
+        with c4:
+            total_gap = report_df[['Gap 30D', 'Gap 40D', 'Gap 60D']].sum().sum()
+            render_stat_card("Total Gap", int(total_gap), "card-40d", "bi-exclamation-triangle")
+
+        st.markdown('<div class="section-title">📊 Detailed Report</div>', unsafe_allow_html=True)
         
-        # Color-coded styling
-        def highlight_gaps(val, col_name):
-            if 'Gap' in col_name and isinstance(val, (int, float)):
-                if val > 0:
+        def style_gap(val):
+            try:
+                v = int(val)
+                if v > 0:
                     return 'color: #e74c3c; font-weight: 700;'
-                elif val == 0:
+                elif v == 0:
                     return 'color: #27ae60; font-weight: 600;'
+            except:
+                pass
             return ''
         
-        styled = report_df.style.apply(lambda row: [highlight_gaps(v, c) for v, c in zip(row, report_df.columns)], axis=1)
+        styled = report_df.style.applymap(style_gap, subset=['Gap 30D', 'Gap 40D', 'Gap 60D'])
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
+        # Excel export
         output = BytesIO()
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -740,9 +1012,13 @@ elif "Reports" in page:
             ws.append(list(row))
         wb.save(output)
         output.seek(0)
-        st.download_button(
-            label="📥 Download Excel Report",
-            data=output,
-            file_name=f"dividers_report_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        
+        c1, c2, c3 = st.columns([1, 1, 1])
+        with c2:
+            st.download_button(
+                label="📥 Download Excel Report",
+                data=output,
+                file_name=f"dividers_report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
