@@ -493,6 +493,41 @@ def load_css():
 
 load_css()
 
+# JavaScript to hide arrow keyword text
+st.markdown("""
+<script>
+function hideArrowText() {
+    // Find all elements and hide those with arrow keyword text
+    const allElements = document.querySelectorAll('*');
+    allElements.forEach(el => {
+        if (el.children.length === 0 && el.textContent) {
+            const text = el.textContent.trim();
+            if (text.includes('keyboard_double_arrow') || 
+                text.includes('keyboard_arrow') ||
+                text.includes('arrow_right') ||
+                text.includes('arrow_left') ||
+                text.match(/^[a-z_]+$/) && text.length > 10) {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+                el.style.fontSize = '0';
+                el.style.color = 'transparent';
+            }
+        }
+    });
+}
+
+// Run on load and observe DOM changes
+document.addEventListener('DOMContentLoaded', hideArrowText);
+hideArrowText();
+
+// Observe DOM mutations to catch dynamically added elements
+const observer = new MutationObserver(hideArrowText);
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Run periodically just in case
+setInterval(hideArrowText, 500);
+</script>
+""", unsafe_allow_html=True)
 
 # ============ DATABASE FUNCTIONS ============
 def get_threshold():
