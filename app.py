@@ -86,50 +86,7 @@ def load_css():
     header[data-testid="stHeader"] {{
         background: transparent !important;
     }}
-    
-/* Hide all keyboard arrow text globally */
-    span[class*="material-icons"],
-    span[class*="material-symbols"],
-    .material-icons,
-    .material-symbols-outlined,
-    .material-symbols-rounded,
-    .material-symbols-sharp {{
-        font-family: 'Material Icons', 'Material Symbols Outlined' !important;
-        font-size: 0 !important;
-        color: transparent !important;
-        line-height: 1 !important;
-        letter-spacing: normal !important;
-        text-transform: none !important;
-        display: inline-block;
-        white-space: nowrap;
-        word-wrap: normal;
-        direction: ltr;
-    }}
-    
-    /* Replace with custom icons using pseudo-elements */
-    span[class*="material-icons"]::before,
-    span[class*="material-symbols"]::before,
-    .material-icons::before,
-    .material-symbols-outlined::before {{
-        font-size: 20px !important;
-        color: inherit !important;
-    }}
-    
-
-    /* Hide default sidebar collapse button completely */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapseButton"] {{
-        display: none !important;
-    }}
-    
-    /* Also hide any material icon spans that show as text */
-    .stApp span[data-testid*="icon"],
-    .stApp [class*="material-symbols"],
-    .stApp [class*="material-icons"] {{
-        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
-    }}
-    
+        
     /* ========== SIDEBAR ========== */
     [data-testid="stSidebar"] {{
         background: {sidebar_bg};
