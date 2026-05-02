@@ -338,44 +338,47 @@ def load_css():
         to {{ opacity: 1; transform: translateY(0); }}
     }}
     
- /* Hide Streamlit branding but keep sidebar toggle */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-.stDeployButton {display: none;}
-[data-testid="stToolbar"] {display: none;}
-header[data-testid="stHeader"] {
-    background: transparent;
-    height: 0;
-}
-
-[data-testid="collapsedControl"] {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    visibility: visible !important;
-    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-    border-radius: 8px;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.4);
-    top: 15px !important;
-    left: 15px !important;
-    color: transparent !important;
-    font-size: 0 !important;
-    overflow: hidden;
-}
-
-[data-testid="collapsedControl"]::before {
-    content: "☰";
-    color: white;
-    font-size: 22px;
-    font-weight: bold;
-}
-
-[data-testid="collapsedControl"] > * {
-    display: none !important;
-}
+    /* Hide Streamlit branding but keep sidebar toggle */
+    div[data-testid="stToolbar"] {{display: none !important;}}
+    div[data-testid="stDecoration"] {{display: none !important;}}
+    div[data-testid="stStatusWidget"] {{display: none !important;}}
+    #MainMenu {{visibility: hidden !important;}}
+    footer {{visibility: hidden !important;}}
+    .stDeployButton {{display: none !important;}}
+    
+    header[data-testid="stHeader"] {{
+        background: transparent;
+        height: 0;
+    }}
+    
+    [data-testid="collapsedControl"] {{
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        visibility: visible !important;
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        border-radius: 8px;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        box-shadow: 0 2px 8px rgba(52, 152, 219, 0.4);
+        top: 15px !important;
+        left: 15px !important;
+        color: transparent !important;
+        font-size: 0 !important;
+        overflow: hidden;
+    }}
+    
+    [data-testid="collapsedControl"]::before {{
+        content: "☰";
+        color: white;
+        font-size: 22px;
+        font-weight: bold;
+    }}
+    
+    [data-testid="collapsedControl"] > * {{
+        display: none !important;
+    }}
     
     /* ========== CUSTOM CARDS ========== */
     .stat-card {{
