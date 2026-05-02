@@ -491,49 +491,51 @@ def load_css():
         margin: 24px 0;
     }}
 
-    /* Fix Material Icons showing as text */
-    span.material-icons,
-    span.material-icons-outlined,
-    [data-testid="stSidebarCollapsedControl"] span,
-    [data-testid="collapsedControl"] span,
-    button[kind="headerNoPadding"] span,
-    button[data-testid="baseButton-headerNoPadding"] span {{
-        font-size: 0 !important;
-        color: transparent !important;
-        position: relative;
-    }}
-    
-    span.material-icons::before,
-    span.material-icons-outlined::before,
-    [data-testid="stSidebarCollapsedControl"] span::before,
-    [data-testid="collapsedControl"] span::before,
-    button[kind="headerNoPadding"] span::before,
-    button[data-testid="baseButton-headerNoPadding"] span::before {{
-        content: "☰";
-        font-size: 24px;
-        color: white;
-        font-family: Arial, sans-serif !important;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-    }}
-    
+  /* Force show sidebar toggle - ALWAYS visible */
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="collapsedControl"] {{
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
         background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
         border-radius: 8px !important;
         padding: 8px !important;
         width: 40px !important;
         height: 40px !important;
-        display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.4) !important;
+        cursor: pointer !important;
     }}
     
-    /* Also load material icons font properly */
-    @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
-    @import url('https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined');
+    [data-testid="stSidebarCollapsedControl"]:hover,
+    [data-testid="collapsedControl"]:hover {{
+        transform: scale(1.05) !important;
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.6) !important;
+    }}
+    
+    /* Hide the text inside and show icon */
+    [data-testid="stSidebarCollapsedControl"] span,
+    [data-testid="collapsedControl"] span,
+    [data-testid="stSidebarCollapsedControl"] *,
+    [data-testid="collapsedControl"] * {{
+        font-size: 0 !important;
+        color: transparent !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"]::before,
+    [data-testid="collapsedControl"]::before {{
+        content: "☰" !important;
+        font-size: 22px !important;
+        color: white !important;
+        font-family: Arial, sans-serif !important;
+        font-weight: bold !important;
+        position: absolute !important;
+    }}
     
     </style>
     """, unsafe_allow_html=True)
