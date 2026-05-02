@@ -5,7 +5,6 @@ import pandas as pd
 from io import BytesIO
 import openpyxl
 import plotly.graph_objects as go
-import plotly.express as px
 
 # Page config
 st.set_page_config(
@@ -77,6 +76,17 @@ def load_css():
     /* Text colors */
     .stApp, .stApp p, .stApp label, .stApp span, .stMarkdown {{
         color: {text_primary};
+    }}
+    
+    /* Clean header but keep sidebar toggle */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    .stDeployButton {{display: none;}}
+    [data-testid="stToolbar"] {{display: none;}}
+    [data-testid="stDecoration"] {{display: none;}}
+    
+    header[data-testid="stHeader"] {{
+        background: transparent !important;
     }}
     
     /* ========== SIDEBAR ========== */
@@ -336,48 +346,6 @@ def load_css():
     @keyframes fadeInUp {{
         from {{ opacity: 0; transform: translateY(20px); }}
         to {{ opacity: 1; transform: translateY(0); }}
-    }}
-    
-    /* Hide Streamlit branding but keep sidebar toggle */
-    div[data-testid="stToolbar"] {{display: none !important;}}
-    div[data-testid="stDecoration"] {{display: none !important;}}
-    div[data-testid="stStatusWidget"] {{display: none !important;}}
-    #MainMenu {{visibility: hidden !important;}}
-    footer {{visibility: hidden !important;}}
-    .stDeployButton {{display: none !important;}}
-    
-    header[data-testid="stHeader"] {{
-        background: transparent;
-        height: 0;
-    }}
-    
-    [data-testid="collapsedControl"] {{
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-        visibility: visible !important;
-        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-        border-radius: 8px;
-        width: 40px;
-        height: 40px;
-        padding: 0;
-        box-shadow: 0 2px 8px rgba(52, 152, 219, 0.4);
-        top: 15px !important;
-        left: 15px !important;
-        color: transparent !important;
-        font-size: 0 !important;
-        overflow: hidden;
-    }}
-    
-    [data-testid="collapsedControl"]::before {{
-        content: "☰";
-        color: white;
-        font-size: 22px;
-        font-weight: bold;
-    }}
-    
-    [data-testid="collapsedControl"] > * {{
-        display: none !important;
     }}
     
     /* ========== CUSTOM CARDS ========== */
@@ -759,7 +727,6 @@ if "Dashboard" in page:
     c1, c2 = st.columns([2, 1])
     
     with c1:
-        # Bar chart
         fig = go.Figure()
         types = ['30D', '40D', '60D']
         fig.add_trace(go.Bar(name='Vendor Stock', x=types, 
@@ -784,7 +751,6 @@ if "Dashboard" in page:
         st.plotly_chart(fig, use_container_width=True)
     
     with c2:
-        # Donut chart
         total = sum(stocks.get(t, 0) for t in types)
         if total > 0:
             fig = go.Figure(data=[go.Pie(
@@ -1010,7 +976,6 @@ elif "Reports" in page:
             })
         report_df = pd.DataFrame(report_rows)
 
-        # Summary metrics
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             render_stat_card("Total Stores", len(report_df), "card-stores", "bi-shop")
@@ -1040,7 +1005,6 @@ elif "Reports" in page:
         styled = report_df.style.applymap(style_gap, subset=['Gap 30D', 'Gap 40D', 'Gap 60D'])
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
-        # Excel export
         output = BytesIO()
         wb = openpyxl.Workbook()
         ws = wb.active
