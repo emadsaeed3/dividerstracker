@@ -25,12 +25,10 @@ supabase = init_supabase()
 
 LOW_STOCK_THRESHOLD = 50
 
-# Initialize session state
 if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = False
 
 
-# ============ CUSTOM CSS ============
 def load_css():
     dark = st.session_state.dark_mode
     
@@ -53,16 +51,17 @@ def load_css():
         card_shadow = "0 4px 20px rgba(0,0,0,0.08)"
         hover_shadow = "0 12px 35px rgba(0,0,0,0.15)"
     
-    st.markdown(f"""
+    css = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css');
+    @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined');
     
     * {{
         font-family: 'Inter', 'Segoe UI', sans-serif !important;
     }}
     
-    /* App Background */
     .stApp {{
         background: {bg_primary};
     }}
@@ -73,12 +72,10 @@ def load_css():
         max-width: 1400px;
     }}
     
-    /* Text colors */
     .stApp, .stApp p, .stApp label, .stApp span, .stMarkdown {{
         color: {text_primary};
     }}
     
-    /* Clean header */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     .stDeployButton {{display: none;}}
@@ -86,8 +83,38 @@ def load_css():
     header[data-testid="stHeader"] {{
         background: transparent !important;
     }}
-        
-    /* ========== SIDEBAR ========== */
+    
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    button[kind="header"],
+    button[kind="headerNoPadding"] {{
+        display: none !important;
+        visibility: hidden !important;
+    }}
+    
+    span.material-symbols-outlined,
+    span.material-symbols-rounded,
+    span.material-symbols-sharp,
+    span.material-icons,
+    span.material-icons-outlined,
+    span.material-icons-round,
+    span.material-icons-sharp {{
+        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
+        font-weight: normal !important;
+        font-style: normal !important;
+        display: inline-block !important;
+        line-height: 1 !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        word-wrap: normal !important;
+        white-space: nowrap !important;
+        direction: ltr !important;
+        -webkit-font-feature-settings: 'liga' !important;
+        -webkit-font-smoothing: antialiased !important;
+        font-feature-settings: 'liga' !important;
+    }}
+    
     [data-testid="stSidebar"] {{
         background: {sidebar_bg};
     }}
@@ -141,7 +168,6 @@ def load_css():
         border-color: #3498db !important;
     }}
     
-    /* ========== TITLES ========== */
     h1 {{
         color: {text_primary} !important;
         font-weight: 800 !important;
@@ -176,7 +202,6 @@ def load_css():
         border-left: 4px solid #3498db;
     }}
     
-    /* ========== METRICS ========== */
     [data-testid="stMetric"] {{
         background: {bg_secondary};
         padding: 22px;
@@ -214,7 +239,6 @@ def load_css():
         line-height: 1.2 !important;
     }}
     
-    /* ========== BUTTONS ========== */
     .stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {{
         border: none;
         padding: 11px 24px;
@@ -252,7 +276,6 @@ def load_css():
         box-shadow: 0 6px 20px rgba(155, 89, 182, 0.5);
     }}
     
-    /* ========== INPUTS ========== */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stTextArea > div > div > textarea,
@@ -279,7 +302,6 @@ def load_css():
         border: 1.5px solid {border_color} !important;
     }}
     
-    /* ========== EXPANDERS ========== */
     [data-testid="stExpander"] {{
         background: {bg_secondary};
         border: 1px solid {border_color};
@@ -302,7 +324,6 @@ def load_css():
         background: rgba(52, 152, 219, 0.05);
     }}
     
-    /* ========== FORMS ========== */
     [data-testid="stForm"] {{
         background: {bg_secondary};
         padding: 28px;
@@ -311,7 +332,6 @@ def load_css():
         box-shadow: {card_shadow};
     }}
     
-    /* ========== DATAFRAMES ========== */
     [data-testid="stDataFrame"] {{
         border-radius: 12px;
         overflow: hidden;
@@ -327,7 +347,6 @@ def load_css():
         letter-spacing: 0.5px;
     }}
     
-    /* ========== ALERTS ========== */
     [data-testid="stAlert"] {{
         border-radius: 12px !important;
         padding: 16px 22px !important;
@@ -346,7 +365,6 @@ def load_css():
         to {{ opacity: 1; transform: translateY(0); }}
     }}
     
-    /* ========== CUSTOM CARDS ========== */
     .stat-card {{
         background: {bg_secondary};
         padding: 24px;
@@ -384,11 +402,6 @@ def load_css():
         margin: 0;
         line-height: 1.1;
     }}
-    .stat-card .stat-sub {{
-        font-size: 0.85rem;
-        color: {text_secondary};
-        margin-top: 8px;
-    }}
     
     .card-30d {{
         border-left: 5px solid #3498db;
@@ -423,7 +436,6 @@ def load_css():
     .card-shipments .icon-bg {{ color: #27ae60; }}
     .card-shipments .stat-value {{ color: {text_primary}; }}
     
-    /* Status Badges */
     .badge-stock {{
         display: inline-block;
         padding: 6px 14px;
@@ -437,7 +449,6 @@ def load_css():
     .badge-warning {{ background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); color: white; }}
     .badge-success {{ background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; }}
     
-    /* Progress */
     .progress-container {{
         background: {border_color};
         border-radius: 20px;
@@ -449,16 +460,8 @@ def load_css():
         height: 100%;
         border-radius: 20px;
         transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-        background-size: 20px 20px;
-        background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
-        animation: stripes 1s linear infinite;
-    }}
-    @keyframes stripes {{
-        from {{ background-position: 0 0; }}
-        to {{ background-position: 40px 0; }}
     }}
     
-    /* Threshold chip */
     .threshold-chip {{
         display: inline-block;
         background: linear-gradient(135deg, #7f8c8d 0%, #636e72 100%);
@@ -470,18 +473,13 @@ def load_css():
         box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }}
     
-    /* Scrollbar */
     ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
     ::-webkit-scrollbar-track {{ background: {bg_primary}; }}
     ::-webkit-scrollbar-thumb {{ 
         background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
         border-radius: 10px;
     }}
-    ::-webkit-scrollbar-thumb:hover {{ 
-        background: linear-gradient(180deg, #2980b9 0%, #1f618d 100%);
-    }}
     
-    /* Divider */
     hr {{
         border: none;
         height: 1px;
@@ -489,7 +487,8 @@ def load_css():
         margin: 24px 0;
     }}
     </style>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(css, unsafe_allow_html=True)
 
 
 load_css()
@@ -606,7 +605,7 @@ def render_progress_card(dtype, required, shipped, gap):
                 <span style="font-size:0.9rem; color:#27ae60;"><b>Shipped:</b> {shipped}</span>
             </div>
             <div class="progress-container">
-                <div class="progress-fill" style="width:{pct}%; background:linear-gradient(90deg, {color} 0%, {color}dd 100%);"></div>
+                <div class="progress-fill" style="width:{pct}%; background:{color};"></div>
             </div>
             <div style="display:flex; justify-content:space-between; margin-top:10px;">
                 <span style="font-size:0.85rem;">{pct:.0f}% complete</span>
@@ -614,46 +613,8 @@ def render_progress_card(dtype, required, shipped, gap):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True);
-    
- /* ========== HIDE SIDEBAR COLLAPSE BUTTON COMPLETELY ========== */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapseButton"],
-    button[kind="header"],
-    button[kind="headerNoPadding"] {{
-        display: none !important;
-        visibility: hidden !important;
-    }}
-    
-    /* ========== FIX MATERIAL ICONS SHOWING AS TEXT ========== */
-    span.material-symbols-outlined,
-    span.material-symbols-rounded,
-    span.material-symbols-sharp,
-    span.material-icons,
-    span.material-icons-outlined,
-    span.material-icons-round,
-    span.material-icons-sharp,
-    [class*="material-symbols"],
-    [class*="material-icons"] {{
-        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
-        font-weight: normal !important;
-        font-style: normal !important;
-        font-size: 20px !important;
-        display: inline-block !important;
-        line-height: 1 !important;
-        text-transform: none !important;
-        letter-spacing: normal !important;
-        word-wrap: normal !important;
-        white-space: nowrap !important;
-        direction: ltr !important;
-        -webkit-font-feature-settings: 'liga' !important;
-        -webkit-font-smoothing: antialiased !important;
-        font-feature-settings: 'liga' !important;
-    }}
-    
-    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
-    @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+    """, unsafe_allow_html=True)
+
 
 # ============ SIDEBAR ============
 with st.sidebar:
@@ -665,13 +626,14 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
+    st.markdown("---")
+    
     page = st.radio("Navigation",
         ["📊  Dashboard", "🏪  Stores", "📦  Vendor Stock", "🚚  Shipments", "📈  Reports"],
         label_visibility="collapsed")
     
     st.markdown("---")
     
-    # Dark mode toggle
     dark_label = "☀️ Switch to Light" if st.session_state.dark_mode else "🌙 Switch to Dark"
     if st.button(dark_label, use_container_width=True):
         st.session_state.dark_mode = not st.session_state.dark_mode
@@ -686,7 +648,6 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
-# Get plotly theme
 def get_plotly_theme():
     if st.session_state.dark_mode:
         return dict(
@@ -761,23 +722,20 @@ if "Dashboard" in page:
         types = ['30D', '40D', '60D']
         fig.add_trace(go.Bar(name='Vendor Stock', x=types, 
                              y=[stocks.get(t, 0) for t in types],
-                             marker_color='#3498db', marker_line_width=0))
+                             marker_color='#3498db'))
         fig.add_trace(go.Bar(name='Required', x=types,
                              y=[req_shipped[t][0] for t in types],
-                             marker_color='#f39c12', marker_line_width=0))
+                             marker_color='#f39c12'))
         fig.add_trace(go.Bar(name='Shipped', x=types,
                              y=[req_shipped[t][1] for t in types],
-                             marker_color='#27ae60', marker_line_width=0))
+                             marker_color='#27ae60'))
         fig.update_layout(
             barmode='group',
             height=380,
             title=dict(text='<b>Stock Overview by Divider Type</b>', font=dict(size=16)),
             margin=dict(t=50, b=40, l=40, r=20),
-            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
             **get_plotly_theme()
         )
-        fig.update_xaxes(showgrid=False)
-        fig.update_yaxes(gridcolor='rgba(128,128,128,0.2)')
         st.plotly_chart(fig, use_container_width=True)
     
     with c2:
@@ -787,14 +745,12 @@ if "Dashboard" in page:
                 labels=types,
                 values=[stocks.get(t, 0) for t in types],
                 hole=0.55,
-                marker=dict(colors=['#3498db', '#e67e22', '#9b59b6'], line=dict(color='white', width=3))
+                marker=dict(colors=['#3498db', '#e67e22', '#9b59b6'])
             )])
             fig.update_layout(
                 height=380,
                 title=dict(text='<b>Stock Distribution</b>', font=dict(size=16)),
                 margin=dict(t=50, b=40, l=20, r=20),
-                showlegend=True,
-                legend=dict(orientation='h', yanchor='bottom', y=-0.1, xanchor='center', x=0.5),
                 **get_plotly_theme()
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -827,7 +783,7 @@ elif "Stores" in page:
     st.markdown('<div class="section-title">📋 All Stores</div>', unsafe_allow_html=True)
     stores_df = get_stores()
     if stores_df.empty:
-        st.info("📭 No stores added yet. Click '**Add New Store**' above to start!")
+        st.info("📭 No stores added yet.")
     else:
         for _, store in stores_df.iterrows():
             with st.expander(f"🏪 **{store['name']}** — 📍 {store['location'] or 'N/A'}"):
@@ -847,11 +803,11 @@ elif "Stores" in page:
                             'name': name, 'location': location,
                             'required_30d': r30, 'required_40d': r40, 'required_60d': r60
                         }).eq('id', store['id']).execute()
-                        st.success("✅ Updated successfully!")
+                        st.success("✅ Updated!")
                         st.rerun()
                     if delete:
                         supabase.table('stores').delete().eq('id', store['id']).execute()
-                        st.warning("🗑️ Store deleted!")
+                        st.warning("🗑️ Deleted!")
                         st.rerun()
 
 
@@ -862,7 +818,7 @@ elif "Vendor Stock" in page:
     threshold = get_threshold()
     
     with st.expander("⚙️ **Low Stock Threshold Settings**"):
-        st.info(f"💡 You'll be alerted when stock drops below this value. Current: **{threshold}** units")
+        st.info(f"💡 Current threshold: **{threshold}** units")
         c1, c2 = st.columns([3, 1])
         new_threshold = c1.number_input("Threshold (units)", min_value=0, value=threshold, label_visibility="collapsed")
         if c2.button("💾 Save"):
@@ -887,7 +843,7 @@ elif "Vendor Stock" in page:
         c1, c2 = st.columns([1, 3])
         dtype = c1.selectbox("Divider Type", ['30D', '40D', '60D'])
         qty = c2.number_input("New Quantity", min_value=0, value=0)
-        note = st.text_input("Note (optional)", placeholder="e.g., New shipment from vendor")
+        note = st.text_input("Note (optional)")
         if st.form_submit_button("🔄 Update Stock"):
             res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
             old_qty = res.data[0]['quantity'] if res.data else 0
@@ -902,7 +858,7 @@ elif "Vendor Stock" in page:
             st.success(f"✅ {dtype} stock updated!")
             st.rerun()
 
-    st.markdown('<div class="section-title">📜 Stock History (Last 20)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">📜 Stock History</div>', unsafe_allow_html=True)
     res = supabase.table('stock_history').select('*').order('date', desc=True).limit(20).execute()
     if res.data:
         hist_df = pd.DataFrame(res.data)
@@ -920,7 +876,7 @@ elif "Shipments" in page:
 
     stores_df = get_stores()
     if stores_df.empty:
-        st.warning("⚠️ Please add a store first before recording shipments.")
+        st.warning("⚠️ Please add a store first.")
     else:
         with st.expander("➕ **Record New Shipment**", expanded=False):
             with st.form("add_shipment", clear_on_submit=True):
@@ -932,7 +888,7 @@ elif "Shipments" in page:
                 q30 = c1.number_input("🔵 Qty 30D", min_value=0, value=0)
                 q40 = c2.number_input("🟠 Qty 40D", min_value=0, value=0)
                 q60 = c3.number_input("🟣 Qty 60D", min_value=0, value=0)
-                notes = st.text_area("📝 Notes", placeholder="Any additional notes...")
+                notes = st.text_area("📝 Notes")
                 if st.form_submit_button("💾 Record Shipment"):
                     store_id = store_options[selected]
                     supabase.table('shipments').insert({
@@ -953,16 +909,16 @@ elif "Shipments" in page:
                                     'divider_type': dtype, 'old_qty': old_qty, 'new_qty': new_qty,
                                     'change': -qty, 'note': f'Shipped to store #{store_id}'
                                 }).execute()
-                    st.success("✅ Shipment recorded successfully!")
+                    st.success("✅ Shipment recorded!")
                     st.rerun()
 
     st.markdown('<div class="section-title">📋 All Shipments</div>', unsafe_allow_html=True)
     shipments_df = get_shipments()
     if shipments_df.empty:
-        st.info("📭 No shipments recorded yet.")
+        st.info("📭 No shipments yet.")
     else:
         display_df = shipments_df[['id', 'store_name', 'date', 'qty_30d', 'qty_40d', 'qty_60d', 'notes']].copy()
-        display_df.columns = ['ID', '🏪 Store', '📅 Date', '🔵 30D', '🟠 40D', '🟣 60D', '📝 Notes']
+        display_df.columns = ['ID', 'Store', 'Date', '30D', '40D', '60D', 'Notes']
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
         st.markdown("---")
@@ -983,7 +939,7 @@ elif "Reports" in page:
     shipments_df = get_shipments()
 
     if stores_df.empty:
-        st.info("📭 No data to display. Add stores and shipments first.")
+        st.info("📭 No data to display.")
     else:
         report_rows = []
         for _, store in stores_df.iterrows():
@@ -1034,6 +990,7 @@ elif "Reports" in page:
         
         styled = report_df.style.map(style_gap, subset=['Gap 30D', 'Gap 40D', 'Gap 60D'])
         st.dataframe(styled, use_container_width=True, hide_index=True)
+
         output = BytesIO()
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -1043,7 +1000,7 @@ elif "Reports" in page:
             ws.append(list(row))
         wb.save(output)
         output.seek(0)
-        
+
         c1, c2, c3 = st.columns([1, 1, 1])
         with c2:
             st.download_button(
