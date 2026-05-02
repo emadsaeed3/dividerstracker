@@ -487,22 +487,29 @@ hr {{
         margin: 24px 0;
     }}
     
-    /* Hide expander arrow text and replace with custom arrow */
-    [data-testid="stExpander"] summary svg,
-    [data-testid="stExpander"] summary span {{
+    /* Hide only the arrow icon in expander, keep text */
+    [data-testid="stExpander"] summary svg {{
         display: none !important;
     }}
     
+    /* Hide material icon spans specifically */
+    [data-testid="stExpander"] summary span[class*="material"],
+    [data-testid="stExpander"] summary span[data-testid*="icon"] {{
+        display: none !important;
+    }}
+    
+    /* Add custom arrow */
     [data-testid="stExpander"] summary::after {{
-        content: "▼" !important;
-        color: #3498db !important;
-        font-size: 14px !important;
-        margin-left: auto !important;
+        content: "▼";
+        color: #3498db;
+        font-size: 14px;
+        margin-left: auto;
+        padding-left: 10px;
         transition: transform 0.3s ease;
     }}
     
     [data-testid="stExpander"] details[open] summary::after {{
-        content: "▲" !important;
+        content: "▲";
     }}
     
     </style>
