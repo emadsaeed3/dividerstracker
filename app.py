@@ -490,6 +490,51 @@ def load_css():
         background: {border_color};
         margin: 24px 0;
     }}
+
+    /* Fix Material Icons showing as text */
+    span.material-icons,
+    span.material-icons-outlined,
+    [data-testid="stSidebarCollapsedControl"] span,
+    [data-testid="collapsedControl"] span,
+    button[kind="headerNoPadding"] span,
+    button[data-testid="baseButton-headerNoPadding"] span {{
+        font-size: 0 !important;
+        color: transparent !important;
+        position: relative;
+    }}
+    
+    span.material-icons::before,
+    span.material-icons-outlined::before,
+    [data-testid="stSidebarCollapsedControl"] span::before,
+    [data-testid="collapsedControl"] span::before,
+    button[kind="headerNoPadding"] span::before,
+    button[data-testid="baseButton-headerNoPadding"] span::before {{
+        content: "☰";
+        font-size: 24px;
+        color: white;
+        font-family: Arial, sans-serif !important;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"] {{
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
+        border-radius: 8px !important;
+        padding: 8px !important;
+        width: 40px !important;
+        height: 40px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }}
+    
+    /* Also load material icons font properly */
+    @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+    @import url('https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined');
+    
     </style>
     """, unsafe_allow_html=True)
 
