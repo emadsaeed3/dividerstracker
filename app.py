@@ -616,6 +616,46 @@ def render_progress_card(dtype, required, shipped, gap):
     </div>
     """, unsafe_allow_html=True)
 
+/* ========== HIDE SIDEBAR COLLAPSE BUTTON COMPLETELY ========== */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    button[kind="header"],
+    button[kind="headerNoPadding"] {{
+        display: none !important;
+        visibility: hidden !important;
+    }}
+    
+    /* ========== FIX MATERIAL ICONS SHOWING AS TEXT ========== */
+    /* Hide all material icon text everywhere */
+    span.material-symbols-outlined,
+    span.material-symbols-rounded,
+    span.material-symbols-sharp,
+    span.material-icons,
+    span.material-icons-outlined,
+    span.material-icons-round,
+    span.material-icons-sharp,
+    [class*="material-symbols"],
+    [class*="material-icons"] {{
+        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
+        font-weight: normal !important;
+        font-style: normal !important;
+        font-size: 20px;
+        display: inline-block;
+        line-height: 1;
+        text-transform: none;
+        letter-spacing: normal;
+        word-wrap: normal;
+        white-space: nowrap;
+        direction: ltr;
+        -webkit-font-feature-settings: 'liga';
+        -webkit-font-smoothing: antialiased;
+        font-feature-settings: 'liga';
+    }}
+    
+    /* Import Material Symbols font */
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+    @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
 # ============ SIDEBAR ============
 with st.sidebar:
@@ -626,13 +666,6 @@ with st.sidebar:
         <p style="font-size:0.8rem; opacity:0.7; margin:0;">Management Dashboard</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Custom close sidebar button
-    if st.button("❌ Close Menu", use_container_width=True, key="close_sidebar"):
-        st.session_state.sidebar_state = "collapsed"
-        st.rerun()
-    
-    st.markdown("---")
     
     page = st.radio("Navigation",
         ["📊  Dashboard", "🏪  Stores", "📦  Vendor Stock", "🚚  Shipments", "📈  Reports"],
