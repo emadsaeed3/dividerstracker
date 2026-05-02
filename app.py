@@ -115,43 +115,19 @@ def load_css():
         color: inherit !important;
     }}
     
-    /* Specific for sidebar toggle */
-    [data-testid="stSidebarCollapsedControl"] span,
-    [data-testid="collapsedControl"] span {{
-        font-size: 0 !important;
-        color: transparent !important;
-        width: 0 !important;
-        height: 0 !important;
-        overflow: hidden !important;
-    }}
-    
-    [data-testid="stSidebarCollapsedControl"]::after,
-    [data-testid="collapsedControl"]::after {{
-        content: "☰" !important;
-        font-size: 24px !important;
-        color: white !important;
-        font-family: Arial, sans-serif !important;
-        font-weight: bold !important;
-        position: absolute !important;
-        top: 50% !important;
-        left: 50% !important;
-        transform: translate(-50%, -50%) !important;
-    }}
-    
-    /* Expander arrow icons */
-    [data-testid="stExpander"] summary svg {{
-        display: block !important;
-    }}
-    [data-testid="stExpander"] summary span[class*="material"] {{
+
+    /* Hide default sidebar collapse button completely */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"] {{
         display: none !important;
     }}
     
-    /* Import Material Icons properly */
-    @font-face {{
-        font-family: 'Material Icons';
-        font-style: normal;
-        font-weight: 400;
-        src: url(https://fonts.gstatic.com/s/materialicons/v143/flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2) format('woff2');
+    /* Also hide any material icon spans that show as text */
+    .stApp span[data-testid*="icon"],
+    .stApp [class*="material-symbols"],
+    .stApp [class*="material-icons"] {{
+        font-family: 'Material Symbols Outlined', 'Material Icons' !important;
     }}
     
     /* ========== SIDEBAR ========== */
@@ -693,6 +669,11 @@ with st.sidebar:
         <p style="font-size:0.8rem; opacity:0.7; margin:0;">Management Dashboard</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Custom close sidebar button
+    if st.button("❌ Close Menu", use_container_width=True, key="close_sidebar"):
+        st.session_state.sidebar_state = "collapsed"
+        st.rerun()
     
     st.markdown("---")
     
