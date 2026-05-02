@@ -491,16 +491,11 @@ hr {{
     [data-testid="stExpander"] summary svg {{
         display: none !important;
     }}
-
     
-    /* Add custom arrow */
-    [data-testid="stExpander"] summary::after {{
-        content: "▼";
-        color: #3498db;
-        font-size: 14px;
-        margin-left: auto;
-        padding-left: 10px;
-        transition: transform 0.3s ease;
+    /* Hide material icon spans specifically */
+    [data-testid="stExpander"] summary span[class*="material"],
+    [data-testid="stExpander"] summary span[data-testid*="icon"] {{
+        display: none !important;
     }}
     
     [data-testid="stExpander"] details[open] summary::after {{
