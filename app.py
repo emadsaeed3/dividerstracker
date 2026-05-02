@@ -339,7 +339,7 @@ def load_css():
     }}
     
     /* Hide Streamlit branding */
-    #MainMenu, footer, header {{visibility: hidden;}}
+    #MainMenu, footer {{visibility: hidden;}}
     .stDeployButton {{display: none;}}
     
     /* ========== CUSTOM CARDS ========== */
