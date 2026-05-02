@@ -1063,8 +1063,8 @@ elif "Reports" in page:
                 pass
             return ''
         
-        styled = report_df.style.applymap(style_gap, subset=['Gap 30D', 'Gap 40D', 'Gap 60D'])
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+styled = report_df.style.map(style_gap, subset=['Gap 30D', 'Gap 40D', 'Gap 60D'])
+st.dataframe(styled, use_container_width=True, hide_index=True)
 
         output = BytesIO()
         wb = openpyxl.Workbook()
