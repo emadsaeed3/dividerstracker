@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+    <span class="badge bg-secondary p-2">Threshold: {{ threshold }} units</span>
+</div>
+
+{% if alerts %}
+<div class="mb-4">
+    {% for alert in alerts %}
+    <div class="alert alert-{{ alert.level }} d-flex align-items-center alert-custom">
+        <i class="bi bi-{{ alert.icon }} fs-4 me-3"></i>
+        <div><strong>{{ alert.type }}:</strong> {{ alert.message }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6"><div class="card stat-card stat-stores p-3"><div class="stat-icon"><i class="bi bi-shop"></i></div><h6>Total Stores</h6><h2>{{ stores_count }}</h2></div></div>
+    <div class="col-md-6"><div class="card stat-card stat-shipments p-3"><div class="stat-icon"><i class="bi bi-truck"></i></div><h6>Total Shipments</h6><h2>{{ shipments_count }}</h2></div></div>
+</div>
+
+<h4 class="mb-3"><i class="bi bi-boxes"></i> Vendor Stock</h4>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card divider-30d p-3">
+            <div class="stat-icon"><i class="bi bi-box"></i></div>
+            <h6>30D Stock</h6>
+            <h2>{{ stock_30d }}</h2>
+            {% if stock_30d < threshold %}<span class="badge bg-warning text-dark mt-2"><i class="bi bi-exclamation-triangle"></i> Low Stock</span>{% endif %}
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card divider-40d p-3">
+            <div class="stat-icon"><i class="bi bi-box"></i></div>
+            <h6>40D Stock</h6>
+            <h2>{{ stock_40d }}</h2>
+            {% if stock_40d < threshold %}<span class="badge bg-warning text-dark mt-2"><i class="bi bi-exclamation-triangle"></i> Low Stock</span>{% endif %}
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card divider-60d p-3">
+            <div class="stat-icon"><i class="bi bi-box"></i></div>
+            <h6>60D Stock</h6>
+            <h2>{{ stock_60d }}</h2>
+            {% if stock_60d < threshold %}<span class="badge bg-warning text-dark mt-2"><i class="bi bi-exclamation-triangle"></i> Low Stock</span>{% endif %}
+        </div>
+    </div>
+</div>
+
+<h4 class="mb-3"><i class="bi bi-bar-chart"></i> Required vs Shipped</h4>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card divider-30d-border p-3">
+            <h5 class="divider-30d-text">30D</h5>
+            <p class="mb-1">Required: <strong>{{ required_30d }}</strong></p>
+            <p class="mb-1">Shipped: <strong class="text-success">{{ shipped_30d }}</strong></p>
+            <p class="mb-0">Gap: <strong class="{% if gap_30d > 0 %}text-danger{% else %}text-success{% endif %}">{{ gap_30d }}</strong></p>
+            <div class="progress mt-2" style="height: 8px;"><div class="progress-bar bg-info" style="width: {{ (shipped_30d / required_30d * 100) if required_30d > 0 else 0 }}%"></div></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card divider-40d-border p-3">
+            <h5 class="divider-40d-text">40D</h5>
+            <p class="mb-1">Required: <strong>{{ required_40d }}</strong></p>
+            <p class="mb-1">Shipped: <strong class="text-success">{{ shipped_40d }}</strong></p>
+            <p class="mb-0">Gap: <strong class="{% if gap_40d > 0 %}text-danger{% else %}text-success{% endif %}">{{ gap_40d }}</strong></p>
+            <div class="progress mt-2" style="height: 8px;"><div class="progress-bar bg-warning" style="width: {{ (shipped_40d / required_40d * 100) if required_40d > 0 else 0 }}%"></div></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card divider-60d-border p-3">
+            <h5 class="divider-60d-text">60D</h5>
+            <p class="mb-1">Required: <strong>{{ required_60d }}</strong></p>
+            <p class="mb-1">Shipped: <strong class="text-success">{{ shipped_60d }}</strong></p>
+            <p class="mb-0">Gap: <strong class="{% if gap_60d > 0 %}text-danger{% else %}text-success{% endif %}">{{ gap_60d }}</strong></p>
+            <div class="progress mt-2" style="height: 8px;"><div class="progress-bar" style="width: {{ (shipped_60d / required_60d * 100) if required_60d > 0 else 0 }}%; background-color: #9b59b6;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card p-3">
+            <h5><i class="bi bi-bar-chart-fill"></i> Overview Chart</h5>
+            <canvas id="mainChart" height="120"></canvas>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-3">
+            <h5><i class="bi bi-pie-chart-fill"></i> Stock Distribution</h5>
+            <canvas id="pieChart"></canvas>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const isDark = document.body.classList.contains('dark-mode');
+const textColor = isDark ? '#e0e0e0' : '#2c3e50';
+
+new Chart(document.getElementById('mainChart'), {
+    type: 'bar',
+    data: {
+        labels: ['30D', '40D', '60D'],
+        datasets: [
+            { label: 'Vendor Stock', data: [{{stock_30d}}, {{stock_40d}}, {{stock_60d}}], backgroundColor: '#3498db' },
+            { label: 'Required', data: [{{required_30d}}, {{required_40d}}, {{required_60d}}], backgroundColor: '#f39c12' },
+            { label: 'Shipped', data: [{{shipped_30d}}, {{shipped_40d}}, {{shipped_60d}}], backgroundColor: '#27ae60' }
+        ]
+    },
+    options: { responsive: true, plugins: { legend: { labels: { color: textColor } } }, scales: { y: { beginAtZero: true, ticks: { color: textColor } }, x: { ticks: { color: textColor } } } }
+});
+
+new Chart(document.getElementById('pieChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['30D', '40D', '60D'],
+        datasets: [{ data: [{{stock_30d}}, {{stock_40d}}, {{stock_60d}}], backgroundColor: ['#3498db', '#e67e22', '#9b59b6'] }]
+    },
+    options: { responsive: true, plugins: { legend: { labels: { color: textColor } } } }
+});
+</script>
+{% endblock %}

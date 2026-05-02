@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+<h2><i class="bi bi-truck"></i> Shipments</h2>
+<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addShipmentModal"><i class="bi bi-plus-circle"></i> Record Shipment</button>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-hover mb-0">
+<thead><tr><th>Date</th><th>Store</th><th class="divider-30d-text">30D</th><th class="divider-40d-text">40D</th><th class="divider-60d-text">60D</th><th>Notes</th><th>Actions</th></tr></thead>
+<tbody>
+{% for s in shipments %}
+<tr>
+<td>{{ s.date.strftime('%Y-%m-%d') }}</td>
+<td><strong>{{ s.store.name }}</strong></td>
+<td><span class="badge-30d">{{ s.qty_30d }}</span></td>
+<td><span class="badge-40d">{{ s.qty_40d }}</span></td>
+<td><span class="badge-60d">{{ s.qty_60d }}</span></td>
+<td>{{ s.notes or '-' }}</td>
+<td><a href="{{ url_for('delete_shipment', id=s.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a></td>
+</tr>
+{% else %}
+<tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-truck fs-1 d-block mb-2"></i>No shipments yet</td></tr>
+{% endfor %}
+</tbody></table></div></div>
+<div class="modal fade" id="addShipmentModal" tabindex="-1"><div class="modal-dialog"><form method="POST" action="{{ url_for('add_shipment') }}"><div class="modal-content">
+<div class="modal-header"><h5>Record Shipment</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal-body">
+<div class="mb-2"><label>Store *</label><select name="store_id" class="form-select" required><option value="">-- Select Store --</option>{% for store in stores %}<option value="{{ store.id }}">{{ store.name }}</option>{% endfor %}</select></div>
+<div class="mb-2"><label>Date</label><input type="date" name="date" class="form-control"></div>
+<div class="mb-2"><label class="divider-30d-text"><i class="bi bi-box"></i> Quantity 30D</label><input type="number" name="qty_30d" class="form-control" value="0"></div>
+<div class="mb-2"><label class="divider-40d-text"><i class="bi bi-box"></i> Quantity 40D</label><input type="number" name="qty_40d" class="form-control" value="0"></div>
+<div class="mb-2"><label class="divider-60d-text"><i class="bi bi-box"></i> Quantity 60D</label><input type="number" name="qty_60d" class="form-control" value="0"></div>
+<div class="mb-2"><label>Notes</label><textarea name="notes" class="form-control"></textarea></div>
+</div>
+<div class="modal-footer"><button class="btn btn-primary">Save Shipment</button></div>
+</div></form></div></div>
+{% endblock %}
