@@ -87,48 +87,71 @@ def load_css():
         background: transparent !important;
     }}
     
-    /* ========== SIDEBAR TOGGLE BUTTON - ALWAYS VISIBLE ========== */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"] {{
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 999999 !important;
-        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
-        border-radius: 8px !important;
-        padding: 8px !important;
-        width: 40px !important;
-        height: 40px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.4) !important;
-        cursor: pointer !important;
-        transition: all 0.3s ease !important;
-    }}
-    
-    [data-testid="stSidebarCollapsedControl"]:hover,
-    [data-testid="collapsedControl"]:hover {{
-        transform: scale(1.05) !important;
-        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.6) !important;
-    }}
-    
-    [data-testid="stSidebarCollapsedControl"] *,
-    [data-testid="collapsedControl"] * {{
+/* Hide all keyboard arrow text globally */
+    span[class*="material-icons"],
+    span[class*="material-symbols"],
+    .material-icons,
+    .material-symbols-outlined,
+    .material-symbols-rounded,
+    .material-symbols-sharp {{
+        font-family: 'Material Icons', 'Material Symbols Outlined' !important;
         font-size: 0 !important;
         color: transparent !important;
+        line-height: 1 !important;
+        letter-spacing: normal !important;
+        text-transform: none !important;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
     }}
     
-    [data-testid="stSidebarCollapsedControl"]::before,
-    [data-testid="collapsedControl"]::before {{
+    /* Replace with custom icons using pseudo-elements */
+    span[class*="material-icons"]::before,
+    span[class*="material-symbols"]::before,
+    .material-icons::before,
+    .material-symbols-outlined::before {{
+        font-size: 20px !important;
+        color: inherit !important;
+    }}
+    
+    /* Specific for sidebar toggle */
+    [data-testid="stSidebarCollapsedControl"] span,
+    [data-testid="collapsedControl"] span {{
+        font-size: 0 !important;
+        color: transparent !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"]::after,
+    [data-testid="collapsedControl"]::after {{
         content: "☰" !important;
-        font-size: 22px !important;
+        font-size: 24px !important;
         color: white !important;
         font-family: Arial, sans-serif !important;
         font-weight: bold !important;
         position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+    }}
+    
+    /* Expander arrow icons */
+    [data-testid="stExpander"] summary svg {{
+        display: block !important;
+    }}
+    [data-testid="stExpander"] summary span[class*="material"] {{
+        display: none !important;
+    }}
+    
+    /* Import Material Icons properly */
+    @font-face {{
+        font-family: 'Material Icons';
+        font-style: normal;
+        font-weight: 400;
+        src: url(https://fonts.gstatic.com/s/materialicons/v143/flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2) format('woff2');
     }}
     
     /* ========== SIDEBAR ========== */
