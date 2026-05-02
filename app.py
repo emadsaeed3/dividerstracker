@@ -614,7 +614,7 @@ def render_progress_card(dtype, required, shipped, gap):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True);
     
  /* ========== HIDE SIDEBAR COLLAPSE BUTTON COMPLETELY ========== */
     [data-testid="stSidebarCollapsedControl"],
