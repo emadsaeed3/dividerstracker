@@ -487,6 +487,46 @@ def load_css():
 
 load_css()
 
+# Force remove arrow text using components
+import streamlit.components.v1 as components
+
+components.html("""
+<script>
+function killArrowText() {
+    const parentDoc = window.parent.document;
+    const walker = parentDoc.createTreeWalker(
+        parentDoc.body,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+    );
+    let node;
+    const toRemove = [];
+    while (node = walker.nextNode()) {
+        if (node.nodeValue && (
+            node.nodeValue.includes('_arrow') ||
+            node.nodeValue.includes('keyboard_') ||
+            node.nodeValue.includes('arrow_right') ||
+            node.nodeValue.includes('arrow_left')
+        )) {
+            toRemove.push(node);
+        }
+    }
+    toRemove.forEach(n => n.nodeValue = '');
+}
+
+killArrowText();
+setInterval(killArrowText, 100);
+
+const obs = new MutationObserver(killArrowText);
+obs.observe(window.parent.document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true
+});
+</script>
+""", height=0)
+
 
 def get_threshold():
     try:
