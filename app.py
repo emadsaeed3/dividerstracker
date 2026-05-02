@@ -491,12 +491,7 @@ hr {{
     [data-testid="stExpander"] summary svg {{
         display: none !important;
     }}
-    
-    /* Hide material icon spans specifically */
-    [data-testid="stExpander"] summary span[class*="material"],
-    [data-testid="stExpander"] summary span[data-testid*="icon"] {{
-        display: none !important;
-    }}
+
     
     /* Add custom arrow */
     [data-testid="stExpander"] summary::after {{
