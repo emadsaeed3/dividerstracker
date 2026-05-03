@@ -1,4 +1,3 @@
-```python
 """
 Database module - All Supabase interactions
 """
@@ -204,4 +203,3 @@ def delete_shipment(shipment_id):
     """Delete a shipment"""
     supabase = get_client()
     supabase.table('shipments').delete().eq('id', shipment_id).execute()
-```
