@@ -1,5 +1,5 @@
 
-```gitignore
+gitignore
 # Python
 __pycache__/
 *.py[cod]
@@ -43,4 +43,3 @@ desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
-```
