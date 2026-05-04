@@ -33,11 +33,6 @@ st.markdown("""
     text-align: center;
     padding: 40px 20px;
 }
-.welcome-logo {
-    max-width: 40px;
-    height: auto;
-    margin-bottom: 20px;
-}
 .welcome-title {
     font-size: 2.5rem;
     margin-bottom: 10px;
@@ -69,11 +64,6 @@ page = render_sidebar()
 
 # Welcome screen if no section selected
 if st.session_state.section is None:
-    logo_b64 = get_logo_base64()
-    logo_html = ""
-    if logo_b64:
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" class="welcome-logo" />'
-
     st.markdown(f"""
     <div class="welcome-container">
         {logo_html}
