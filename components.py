@@ -10,11 +10,15 @@ from styles import get_plotly_theme
 
 # ==================== LOGO HELPER ====================
 
-def get_logo_base64():
+def get_logo_base64(force_white=False):
     """Load the appropriate logo based on dark/light mode"""
     is_dark = st.session_state.get('dark_mode', False)
-    logo_file = "Now-PrimaryLogo-White.png" if is_dark else "Now-PrimaryLogo-Squid.png"
     
+    if force_white or is_dark:
+        logo_file = "Now-PrimaryLogo-White.png"
+    else:
+        logo_file = "Now-PrimaryLogo-Squid.png"
+
     try:
         if os.path.exists(logo_file):
             with open(logo_file, "rb") as f:
@@ -27,16 +31,20 @@ def get_logo_base64():
 # ==================== SIDEBAR ====================
 
 def render_sidebar():
-    """Render sidebar with navigation and dark mode toggle"""
+    """Render sidebar with section switcher + navigation"""
+    # Initialize section state
+    if 'section' not in st.session_state:
+        st.session_state.section = 'dividers'
+
     with st.sidebar:
-        # Logo
-        logo_b64 = get_logo_base64()
+        # Logo (always white in sidebar since sidebar has dark bg)
+        logo_b64 = get_logo_base64(force_white=True)
         if logo_b64:
             st.markdown(f"""
             <div style="text-align:center; padding: 10px 0 15px 0;">
                 <img src="data:image/png;base64,{logo_b64}" 
                      style="max-width: 160px; height: auto; margin-bottom: 8px;" />
-                <h1 style="margin:8px 0 0 0; font-size:1.3rem !important;">Dividers Tracker</h1>
+                <h1 style="margin:8px 0 0 0; font-size:1.25rem !important;">Launch Team Tracker</h1>
                 <p style="font-size:0.75rem; opacity:0.85; margin:4px 0 0 0;">
                     Launch Team • Amazon Now
                 </p>
@@ -46,7 +54,7 @@ def render_sidebar():
             st.markdown("""
             <div style="text-align:center; padding: 10px 0 15px 0;">
                 <i class="bi bi-box-seam" style="font-size:2.5rem; color:#3498db;"></i>
-                <h1 style="margin:8px 0 0 0;">Dividers Tracker</h1>
+                <h1 style="margin:8px 0 0 0;">Launch Team Tracker</h1>
                 <p style="font-size:0.75rem; opacity:0.85; margin:4px 0 0 0;">
                     Launch Team • Amazon Now
                 </p>
@@ -55,19 +63,74 @@ def render_sidebar():
 
         st.markdown("---")
 
-        # Navigation
-        page = st.radio(
-            "Navigation",
-            [
-                "📊  Dashboard",
-                "🏪  Stores",
-                "📦  Vendor Stock",
-                "🧲  Magnets",
-                "🚚  Shipments",
-                "📈  Reports"
-            ],
-            label_visibility="collapsed"
-        )
+        # Section Switcher (Toggle buttons)
+        st.markdown("""
+        <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
+                    letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
+            🔄 Section
+        </div>
+        """, unsafe_allow_html=True)
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            dividers_active = st.session_state.section == 'dividers'
+            if st.button(
+                "📦 Dividers",
+                use_container_width=True,
+                key="btn_dividers",
+                type="primary" if dividers_active else "secondary"
+            ):
+                st.session_state.section = 'dividers'
+                st.rerun()
+        
+        with c2:
+            it_active = st.session_state.section == 'it'
+            if st.button(
+                "💻 4M IT",
+                use_container_width=True,
+                key="btn_it",
+                type="primary" if it_active else "secondary"
+            ):
+                st.session_state.section = 'it'
+                st.rerun()
+
+        st.markdown("---")
+
+        # Navigation (changes based on section)
+        st.markdown("""
+        <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
+                    letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
+            📍 Navigation
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.session_state.section == 'dividers':
+            page = st.radio(
+                "Navigation",
+                [
+                    "📊  Dashboard",
+                    "🏪  Stores",
+                    "📦  Vendor Stock",
+                    "🧲  Magnets",
+                    "🚚  Shipments",
+                    "📈  Reports"
+                ],
+                label_visibility="collapsed",
+                key="nav_dividers"
+            )
+        else:
+            page = st.radio(
+                "Navigation",
+                [
+                    "📊  Dashboard",
+                    "🏢  RDCs",
+                    "💻  IT Stock",
+                    "🚚  Shipments",
+                    "📈  Reports"
+                ],
+                label_visibility="collapsed",
+                key="nav_it"
+            )
 
         st.markdown("---")
 
@@ -126,7 +189,7 @@ def render_stock_card(dtype, qty, threshold):
 def render_progress_card(dtype, required, shipped, gap):
     """Render a progress card showing Required vs Shipped"""
     color_map = {'30D': '#3498db', '40D': '#e67e22', '60D': '#9b59b6'}
-    color = color_map[dtype]
+    color = color_map.get(dtype, '#3498db')
     pct = min((shipped / required * 100) if required > 0 else 0, 100)
     gap_color = "#e74c3c" if gap > 0 else "#27ae60"
     gap_icon = "⚠️" if gap > 0 else "✅"
@@ -178,6 +241,28 @@ def render_magnet_status_card(dtype, with_magnet, without_magnet):
                 <div class="progress-fill" style="width:{pct}%; background:{color};"></div>
             </div>
         </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_it_stock_card(item_name, qty, threshold, icon="bi-cpu"):
+    """Render IT equipment stock card"""
+    if qty == 0:
+        badge = '<span class="badge-stock badge-danger">❌ Out of Stock</span>'
+        border_color = '#e74c3c'
+    elif qty < threshold:
+        badge = '<span class="badge-stock badge-warning">⚠️ Low Stock</span>'
+        border_color = '#f39c12'
+    else:
+        badge = '<span class="badge-stock badge-success">✅ In Stock</span>'
+        border_color = '#27ae60'
+
+    st.markdown(f"""
+    <div class="stat-card" style="border-left: 5px solid {border_color};">
+        <i class="bi {icon} icon-bg" style="color:{border_color};"></i>
+        <div class="stat-label">{item_name}</div>
+        <div class="stat-value" style="font-size:2.2rem;">{qty}</div>
+        {badge}
     </div>
     """, unsafe_allow_html=True)
 
