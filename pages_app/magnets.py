@@ -9,46 +9,15 @@ from database import (
     apply_magnet_to_dividers, set_dividers_without_magnet,
     get_magnet_history, get_stocks_dict
 )
-from components import render_section_title
-
-
-def render_magnet_card(dtype, with_magnet, without_magnet):
-    """Render a magnet status card for a divider type"""
-    color_map = {'30D': '#3498db', '40D': '#e67e22', '60D': '#9b59b6'}
-    color = color_map.get(dtype, '#3498db')
-    
-    total = with_magnet + without_magnet
-    pct = (with_magnet / total * 100) if total > 0 else 0
-    
-    st.markdown(f"""
-    <div class="stat-card card-{dtype.lower()}">
-        <i class="bi bi-magnet icon-bg"></i>
-        <div class="stat-label" style="color:{color};">{dtype} Magnet Status</div>
-        <div style="margin-top: 14px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                <span style="font-size:0.95rem;">🧲 <b>With Magnet:</b> <span style="color:#27ae60; font-weight:700;">{with_magnet}</span></span>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                <span style="font-size:0.95rem;">⭕ <b>Without:</b> <span style="color:#e74c3c; font-weight:700;">{without_magnet}</span></span>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:6px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.1);">
-                <span style="font-size:0.9rem;"><b>Total:</b> {total}</span>
-                <span style="font-size:0.9rem; font-weight:700; color:{color};">{pct:.0f}% complete</span>
-            </div>
-            <div class="progress-container" style="margin-top:8px;">
-                <div class="progress-fill" style="width:{pct}%; background:{color};"></div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+from components import render_section_title, render_magnet_status_card
 
 
 def render_strips_card(strips_qty):
     """Render the magnet strips stock card"""
     possible_dividers = strips_qty  # 1 strip = 1 divider (limited by rectangles)
-    
+
     st.markdown(f"""
-    <div class="stat-card" style="border-left: 5px solid #16a085; background: linear-gradient(135deg, var(--bg-secondary, #fff) 0%, rgba(22, 160, 133, 0.08) 100%);">
+    <div class="stat-card" style="border-left: 5px solid #16a085;">
         <i class="bi bi-layout-three-columns icon-bg" style="color:#16a085;"></i>
         <div class="stat-label" style="color:#16a085;">🎗️ Magnet Strips at Vendor</div>
         <div class="stat-value" style="color:#16a085;">{strips_qty}</div>
@@ -65,7 +34,7 @@ def render_strips_card(strips_qty):
 def render():
     """Render the Magnets page"""
     st.markdown("# 🧲 Magnets Tracker")
-    
+
     st.markdown("""
     <div style="background: rgba(52, 152, 219, 0.1); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #3498db; margin-bottom: 20px;">
         <b>📌 How it works:</b><br>
@@ -75,14 +44,14 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    # Magnet strips at vendor
+    # Strips stock
     render_section_title("🎗️ Magnet Strips Stock")
     strips_qty = get_magnet_stock()
-    
+
     c1, c2 = st.columns([2, 1])
     with c1:
         render_strips_card(strips_qty)
-    
+
     with c2:
         with st.form("update_strips"):
             st.markdown("**🔄 Update Strips Count**")
@@ -99,24 +68,23 @@ def render():
 
     # Dividers magnet status
     render_section_title("📊 Dividers Magnet Status")
-    
-    # Sync with vendor stock suggestion
+
     stocks = get_stocks_dict()
     magnet_status = get_magnet_status_dict()
-    
+
     c1, c2, c3 = st.columns(3)
     for idx, dtype in enumerate(['30D', '40D', '60D']):
         status = magnet_status.get(dtype, {'with_magnet': 0, 'without_magnet': 0})
         with [c1, c2, c3][idx]:
-            render_magnet_card(dtype, status['with_magnet'], status['without_magnet'])
+            render_magnet_status_card(dtype, status['with_magnet'], status['without_magnet'])
 
-    # Info about mismatch with vendor stock
+    # Sync warning
     total_magnet_tracked = sum(
         magnet_status.get(t, {}).get('with_magnet', 0) + magnet_status.get(t, {}).get('without_magnet', 0)
         for t in ['30D', '40D', '60D']
     )
     total_vendor_stock = sum(stocks.get(t, 0) for t in ['30D', '40D', '60D'])
-    
+
     if total_magnet_tracked != total_vendor_stock:
         st.warning(
             f"⚠️ **Mismatch detected:** Tracked dividers = **{total_magnet_tracked}** | "
@@ -126,7 +94,7 @@ def render():
 
     # Actions
     render_section_title("⚙️ Actions")
-    
+
     tab1, tab2 = st.tabs(["🧲 Apply Magnet", "⭕ Set Without Magnet"])
 
     with tab1:
@@ -136,10 +104,10 @@ def render():
             dtype = c1.selectbox("Divider Type", ['30D', '40D', '60D'])
             qty = c2.number_input("Quantity to Magnetize", min_value=1, value=1)
             note = st.text_input("Note (optional)", key='apply_note')
-            
+
             current_without = magnet_status.get(dtype, {}).get('without_magnet', 0)
             st.info(f"💡 Available without magnet for {dtype}: **{current_without}** | Strips in stock: **{strips_qty}**")
-            
+
             if st.form_submit_button("🧲 Apply Magnet"):
                 if qty > current_without:
                     st.error(f"❌ Only {current_without} {dtype} dividers available without magnet!")
@@ -158,7 +126,7 @@ def render():
             dtype = c1.selectbox("Divider Type", ['30D', '40D', '60D'], key='set_dtype')
             current = magnet_status.get(dtype, {}).get('without_magnet', 0) if dtype else 0
             qty = c2.number_input("Total Without Magnet", min_value=0, value=int(current))
-            
+
             if st.form_submit_button("💾 Set Quantity"):
                 set_dividers_without_magnet(dtype, qty)
                 st.success(f"✅ {dtype} without-magnet set to {qty}")
@@ -167,12 +135,12 @@ def render():
     # History
     render_section_title("📜 Magnet History")
     hist_df = get_magnet_history(limit=20)
-    
+
     if not hist_df.empty:
         display_cols = ['date', 'action', 'divider_type', 'qty', 'strips_used', 'note']
         available_cols = [c for c in display_cols if c in hist_df.columns]
         hist_df = hist_df[available_cols].copy()
-        
+
         rename_map = {
             'date': 'Date',
             'action': 'Action',
@@ -182,10 +150,10 @@ def render():
             'note': 'Note'
         }
         hist_df = hist_df.rename(columns=rename_map)
-        
+
         if 'Date' in hist_df.columns:
             hist_df['Date'] = pd.to_datetime(hist_df['Date']).dt.strftime('%Y-%m-%d %H:%M')
-        
+
         st.dataframe(hist_df, use_container_width=True, hide_index=True)
     else:
         st.info("📭 No magnet history yet.")
