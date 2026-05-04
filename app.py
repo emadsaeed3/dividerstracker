@@ -31,17 +31,22 @@ st.markdown("""
 <style>
 .welcome-container {
     text-align: center;
-    padding: 40px 20px;
+    padding: 30px 20px;
+}
+.welcome-logo {
+    max-width: 140px;
+    height: auto;
+    margin-bottom: 20px;
 }
 .welcome-title {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
     margin-bottom: 10px;
     font-weight: 800;
 }
 .welcome-subtitle {
-    font-size: 1.1rem;
+    font-size: 1rem;
     opacity: 0.75;
-    margin-bottom: 40px;
+    margin-bottom: 30px;
 }
 
 /* Style the welcome section buttons */
@@ -64,6 +69,11 @@ page = render_sidebar()
 
 # Welcome screen if no section selected
 if st.session_state.section is None:
+    logo_b64 = get_logo_base64()
+    logo_html = ""
+    if logo_b64:
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" class="welcome-logo" />'
+    
     st.markdown(f"""
     <div class="welcome-container">
         {logo_html}
