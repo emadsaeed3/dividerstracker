@@ -132,7 +132,8 @@ def get_stores():
     return pd.DataFrame()
 
 
-def add_store(name, location, r30, r40, r60, launch_date=None, transportation_ready=False):
+def add_store(name, location, r30, r40, r60, launch_date=None, transportation_ready=False,
+              is_launched=False, received_30d=0, received_40d=0, received_60d=0):
     """Add a new store"""
     supabase = get_client()
     data = {
@@ -141,14 +142,19 @@ def add_store(name, location, r30, r40, r60, launch_date=None, transportation_re
         'required_30d': r30,
         'required_40d': r40,
         'required_60d': r60,
-        'transportation_ready': transportation_ready
+        'transportation_ready': transportation_ready,
+        'is_launched': is_launched,
+        'received_30d': received_30d,
+        'received_40d': received_40d,
+        'received_60d': received_60d,
     }
     if launch_date:
         data['launch_date'] = launch_date.isoformat() if hasattr(launch_date, 'isoformat') else launch_date
     supabase.table('stores').insert(data).execute()
 
 
-def update_store(store_id, name, location, r30, r40, r60, launch_date=None, transportation_ready=False):
+def update_store(store_id, name, location, r30, r40, r60, launch_date=None, transportation_ready=False,
+                 is_launched=False, received_30d=0, received_40d=0, received_60d=0):
     """Update an existing store"""
     supabase = get_client()
     data = {
@@ -157,7 +163,11 @@ def update_store(store_id, name, location, r30, r40, r60, launch_date=None, tran
         'required_30d': r30,
         'required_40d': r40,
         'required_60d': r60,
-        'transportation_ready': transportation_ready
+        'transportation_ready': transportation_ready,
+        'is_launched': is_launched,
+        'received_30d': received_30d,
+        'received_40d': received_40d,
+        'received_60d': received_60d,
     }
     if launch_date:
         data['launch_date'] = launch_date.isoformat() if hasattr(launch_date, 'isoformat') else launch_date
@@ -173,7 +183,7 @@ def delete_store(store_id):
 
 
 def get_upcoming_launches(days_ahead=4):
-    """Get stores with launch date within the specified days"""
+    """Get stores with launch date within the specified days (NOT launched yet)"""
     supabase = get_client()
     today = date.today()
     future = today + timedelta(days=days_ahead)
@@ -181,10 +191,64 @@ def get_upcoming_launches(days_ahead=4):
     if not res.data:
         return pd.DataFrame()
     df = pd.DataFrame(res.data)
+    
+    # Filter out already launched stores
+    if 'is_launched' in df.columns:
+        df = df[df['is_launched'] != True]
+    
+    if df.empty:
+        return pd.DataFrame()
+    
     df['launch_date'] = pd.to_datetime(df['launch_date']).dt.date
     df = df[(df['launch_date'] >= today) & (df['launch_date'] <= future)]
     df['days_left'] = df['launch_date'].apply(lambda d: (d - today).days)
     return df.sort_values('days_left')
+
+
+def get_discrepancies(stores_df, shipments_df):
+    """Calculate discrepancy between shipped and received quantities per store"""
+    discrepancies = []
+    
+    if stores_df.empty:
+        return pd.DataFrame()
+    
+    for _, store in stores_df.iterrows():
+        # Get shipments for this store
+        store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else pd.DataFrame()
+        
+        s30 = int(store_ships['qty_30d'].sum()) if not store_ships.empty else 0
+        s40 = int(store_ships['qty_40d'].sum()) if not store_ships.empty else 0
+        s60 = int(store_ships['qty_60d'].sum()) if not store_ships.empty else 0
+        
+        r30 = int(store.get('received_30d', 0) or 0)
+        r40 = int(store.get('received_40d', 0) or 0)
+        r60 = int(store.get('received_60d', 0) or 0)
+        
+        # Only include if received > 0 OR there's a discrepancy
+        if r30 == 0 and r40 == 0 and r60 == 0:
+            continue
+        
+        diff_30 = r30 - s30
+        diff_40 = r40 - s40
+        diff_60 = r60 - s60
+        
+        if diff_30 != 0 or diff_40 != 0 or diff_60 != 0:
+            discrepancies.append({
+                'store_id': store['id'],
+                'name': store['name'],
+                'location': store['location'] or 'N/A',
+                'shipped_30d': s30,
+                'received_30d': r30,
+                'diff_30d': diff_30,
+                'shipped_40d': s40,
+                'received_40d': r40,
+                'diff_40d': diff_40,
+                'shipped_60d': s60,
+                'received_60d': r60,
+                'diff_60d': diff_60,
+            })
+    
+    return pd.DataFrame(discrepancies)
 
 
 # ==================== SHIPMENTS ====================
@@ -296,26 +360,14 @@ def get_magnet_status_dict():
 
 
 def apply_magnet_to_dividers(divider_type, qty, note=''):
-    """Apply magnet to dividers (تلزيق المغناطيس)
-    Each divider needs 2 squares + 1 rectangle = uses parts from strips
-    1 strip = 3 squares + 1 rectangle
-    So for 1 divider we need parts from strips
-    
-    Let's calculate: 1 strip serves ~1 divider (uses 2/3 of squares + full rectangle)
-    For simplicity: 1 divider = 1 strip equivalent worth of pieces
-    Actually: 3 strips = 9 squares + 3 rectangles = can make 4.5 dividers (9/2=4, limited by rect)
-    So 3 strips = 3 dividers (limited by rectangles)
-    Therefore: 1 strip = 1 divider
-    """
+    """Apply magnet to dividers"""
     supabase = get_client()
-    strips_needed = qty  # 1 strip per divider (limited by rectangles)
+    strips_needed = qty
 
-    # Check current strips
     current_strips = get_magnet_stock()
     if current_strips < strips_needed:
         return False, f"Not enough strips! Need {strips_needed}, have {current_strips}"
 
-    # Get current magnet status
     res = supabase.table('dividers_magnet_status').select('*').eq('divider_type', divider_type).execute()
     if not res.data:
         return False, "Divider type not found"
@@ -324,14 +376,12 @@ def apply_magnet_to_dividers(divider_type, qty, note=''):
     new_with = current['with_magnet'] + qty
     new_without = max(0, current['without_magnet'] - qty)
 
-    # Update magnet status
     supabase.table('dividers_magnet_status').update({
         'with_magnet': new_with,
         'without_magnet': new_without,
         'last_updated': datetime.utcnow().isoformat()
     }).eq('divider_type', divider_type).execute()
 
-    # Deduct strips
     new_strips = current_strips - strips_needed
     strip_res = supabase.table('magnet_stock').select('*').limit(1).execute()
     if strip_res.data:
@@ -340,7 +390,6 @@ def apply_magnet_to_dividers(divider_type, qty, note=''):
             'last_updated': datetime.utcnow().isoformat()
         }).eq('id', strip_res.data[0]['id']).execute()
 
-    # Log history
     supabase.table('magnet_history').insert({
         'action': 'Apply Magnet',
         'divider_type': divider_type,
@@ -353,7 +402,7 @@ def apply_magnet_to_dividers(divider_type, qty, note=''):
 
 
 def set_dividers_without_magnet(divider_type, qty):
-    """Set the quantity of dividers without magnet (initial setup)"""
+    """Set the quantity of dividers without magnet"""
     supabase = get_client()
     supabase.table('dividers_magnet_status').update({
         'without_magnet': qty,
