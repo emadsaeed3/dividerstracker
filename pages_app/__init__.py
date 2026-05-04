@@ -1,1 +1,1 @@
-   """Pages package for Dividers Tracker"""
+"""Pages package for Dividers Tracker"""
