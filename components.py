@@ -19,24 +19,31 @@ def render_sidebar():
             <p style="font-size:0.8rem; opacity:0.7; margin:0;">Management Dashboard</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("---")
-        
+
         # Navigation
         page = st.radio(
             "Navigation",
-            ["📊  Dashboard", "🏪  Stores", "📦  Vendor Stock", "🚚  Shipments", "📈  Reports"],
+            [
+                "📊  Dashboard",
+                "🏪  Stores",
+                "📦  Vendor Stock",
+                "🧲  Magnets",
+                "🚚  Shipments",
+                "📈  Reports"
+            ],
             label_visibility="collapsed"
         )
-        
+
         st.markdown("---")
-        
+
         # Dark mode toggle
         dark_label = "☀️ Switch to Light" if st.session_state.dark_mode else "🌙 Switch to Dark"
         if st.button(dark_label, use_container_width=True):
             st.session_state.dark_mode = not st.session_state.dark_mode
             st.rerun()
-        
+
         # Footer
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
@@ -45,7 +52,7 @@ def render_sidebar():
             © 2025
         </div>
         """, unsafe_allow_html=True)
-        
+
         return page
 
 
@@ -65,14 +72,14 @@ def render_stat_card(label, value, card_class, icon):
 def render_stock_card(dtype, qty, threshold):
     """Render a stock card with status badge"""
     card_class = f"card-{dtype.lower()}"
-    
+
     if qty == 0:
         badge = '<span class="badge-stock badge-danger">❌ Out of Stock</span>'
     elif qty < threshold:
         badge = '<span class="badge-stock badge-warning">⚠️ Low Stock</span>'
     else:
         badge = '<span class="badge-stock badge-success">✅ In Stock</span>'
-    
+
     st.markdown(f"""
     <div class="stat-card {card_class}">
         <i class="bi bi-box-seam icon-bg"></i>
@@ -90,7 +97,8 @@ def render_progress_card(dtype, required, shipped, gap):
     pct = min((shipped / required * 100) if required > 0 else 0, 100)
     gap_color = "#e74c3c" if gap > 0 else "#27ae60"
     gap_icon = "⚠️" if gap > 0 else "✅"
-    
+    gap_label = "Pending" if gap > 0 else "Complete"
+
     st.markdown(f"""
     <div class="stat-card card-{dtype.lower()}">
         <i class="bi bi-bar-chart-fill icon-bg"></i>
@@ -105,7 +113,7 @@ def render_progress_card(dtype, required, shipped, gap):
             </div>
             <div style="display:flex; justify-content:space-between; margin-top:10px;">
                 <span style="font-size:0.85rem;">{pct:.0f}% complete</span>
-                <span style="font-weight:700; color:{gap_color};">{gap_icon} Gap: {gap}</span>
+                <span style="font-weight:700; color:{gap_color};">{gap_icon} {gap_label}: {gap}</span>
             </div>
         </div>
     </div>
@@ -133,7 +141,7 @@ def render_bar_chart(stocks_data, required_data, shipped_data):
     """Render grouped bar chart: Stock vs Required vs Shipped"""
     types = ['30D', '40D', '60D']
     fig = go.Figure()
-    
+
     fig.add_trace(go.Bar(
         name='Vendor Stock',
         x=types,
@@ -152,7 +160,7 @@ def render_bar_chart(stocks_data, required_data, shipped_data):
         y=shipped_data,
         marker_color='#27ae60'
     ))
-    
+
     fig.update_layout(
         barmode='group',
         height=380,
@@ -160,7 +168,7 @@ def render_bar_chart(stocks_data, required_data, shipped_data):
         margin=dict(t=50, b=40, l=40, r=20),
         **get_plotly_theme()
     )
-    
+
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -169,23 +177,23 @@ def render_pie_chart(stocks_data):
     types = ['30D', '40D', '60D']
     values = [stocks_data.get(t, 0) for t in types]
     total = sum(values)
-    
+
     if total == 0:
         st.info("📊 No stock data yet.")
         return
-    
+
     fig = go.Figure(data=[go.Pie(
         labels=types,
         values=values,
         hole=0.55,
         marker=dict(colors=['#3498db', '#e67e22', '#9b59b6'])
     )])
-    
+
     fig.update_layout(
         height=380,
         title=dict(text='<b>Stock Distribution</b>', font=dict(size=16)),
         margin=dict(t=50, b=40, l=20, r=20),
         **get_plotly_theme()
     )
-    
+
     st.plotly_chart(fig, use_container_width=True)
