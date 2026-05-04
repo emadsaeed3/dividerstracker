@@ -9,7 +9,7 @@ from database import (
 )
 from components import (
     render_stat_card, render_stock_card, render_progress_card,
-    render_threshold_chip, render_section_title,
+    render_magnet_status_card, render_threshold_chip, render_section_title,
     render_bar_chart, render_pie_chart
 )
 
@@ -39,17 +39,16 @@ def calculate_launch_alerts():
     """Calculate alerts for upcoming store launches"""
     alerts = []
     upcoming = get_upcoming_launches(days_ahead=4)
-    
+
     if upcoming.empty:
         return alerts
-    
+
     for _, store in upcoming.iterrows():
         days_left = store['days_left']
         name = store['name']
         location = store.get('location') or 'N/A'
         transport_ready = bool(store.get('transportation_ready', False))
-        
-        # Launch date alerts
+
         if days_left == 0:
             alerts.append(('danger', f'🚀 **LAUNCHING TODAY:** {name} ({location}) — Make sure everything is delivered!'))
         elif days_left == 1:
@@ -62,7 +61,7 @@ def calculate_launch_alerts():
             alerts.append(('info', f'📅 **Launch in {days_left} days:** {name} ({location}) — Prepare shipment soon.'))
             if not transport_ready and days_left <= 3:
                 alerts.append(('warning', f'🚚 **Transportation not ready** for {name} — Arrange within 24h'))
-    
+
     return alerts
 
 
@@ -71,20 +70,19 @@ def calculate_magnet_alerts(stocks):
     alerts = []
     strips = get_magnet_stock()
     magnet_status = get_magnet_status_dict()
-    
-    # Total dividers without magnet
+
     total_without = sum(
         magnet_status.get(t, {}).get('without_magnet', 0)
         for t in ['30D', '40D', '60D']
     )
-    
+
     if total_without > 0 and strips < total_without:
         shortage = total_without - strips
         alerts.append((
             'warning',
             f'🧲 **Magnet shortage:** Need **{shortage}** more strips to cover all dividers ({total_without} dividers without magnet, only {strips} strips available)'
         ))
-    
+
     return alerts
 
 
@@ -101,13 +99,13 @@ def render():
     stores_df = get_stores()
     shipments_df = get_shipments()
 
-    # Combine all alerts
+    # Alerts
     stock_alerts = calculate_stock_alerts(stocks, stores_df, shipments_df, threshold)
     launch_alerts = calculate_launch_alerts()
     magnet_alerts = calculate_magnet_alerts(stocks)
-    
+
     all_alerts = launch_alerts + stock_alerts + magnet_alerts
-    
+
     if all_alerts:
         render_section_title("🔔 Alerts")
         for level, msg in all_alerts:
@@ -120,12 +118,11 @@ def render():
 
     # Overview
     render_section_title("📌 Overview")
-    
-    # Count pending shipments
+
     pending_count = 0
     if not shipments_df.empty and 'delivery_status' in shipments_df.columns:
         pending_count = len(shipments_df[shipments_df['delivery_status'].isin(['Pending', 'In Transit'])])
-    
+
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         render_stat_card("Total Stores", len(stores_df), "card-stores", "bi-shop")
@@ -161,14 +158,21 @@ def render():
         with [c1, c2, c3][idx]:
             render_progress_card(dtype, required, shipped, gap)
 
-    # Magnet overview
-    render_section_title("🧲 Magnet Overview")
+    # Magnet Status (visible on Dashboard)
+    render_section_title("🧲 Dividers Magnet Status")
     magnet_status = get_magnet_status_dict()
     strips = get_magnet_stock()
-    
+
+    c1, c2, c3 = st.columns(3)
+    for idx, dtype in enumerate(['30D', '40D', '60D']):
+        status = magnet_status.get(dtype, {'with_magnet': 0, 'without_magnet': 0})
+        with [c1, c2, c3][idx]:
+            render_magnet_status_card(dtype, status['with_magnet'], status['without_magnet'])
+
+    # Magnet Overview
     total_with = sum(magnet_status.get(t, {}).get('with_magnet', 0) for t in ['30D', '40D', '60D'])
     total_without = sum(magnet_status.get(t, {}).get('without_magnet', 0) for t in ['30D', '40D', '60D'])
-    
+
     c1, c2, c3 = st.columns(3)
     with c1:
         render_stat_card("Magnet Strips", strips, "card-60d", "bi-layout-three-columns")
