@@ -69,14 +69,9 @@ page = render_sidebar()
 
 # Welcome screen if no section selected
 if st.session_state.section is None:
-    logo_b64 = get_logo_base64()
-    logo_html = ""
-    if logo_b64:
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="max-width:140px !important; width:140px !important; height:auto !important; margin:0 auto 20px auto; display:block;" />'
-    
-    st.markdown(f"""
-    <div style="text-align:center; padding:30px 20px;">
-        {logo_html}
+    st.markdown("""
+    <div style="text-align:center; padding:40px 20px 30px 20px;">
+        <div style="font-size:3rem; margin-bottom:15px;">🚀</div>
         <div style="font-size:2.2rem; margin-bottom:10px; font-weight:800;">Welcome to Launch Team Tracker</div>
         <div style="font-size:1rem; opacity:0.75; margin-bottom:30px;">Choose a section to get started</div>
     </div>
