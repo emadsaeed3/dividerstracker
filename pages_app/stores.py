@@ -2,13 +2,20 @@
 Stores management page
 """
 import streamlit as st
+import pandas as pd
 from datetime import date, timedelta
-from database import get_stores, add_store, update_store, delete_store
+from database import (
+    get_stores, add_store, update_store, delete_store,
+    get_shipments, get_discrepancies
+)
 from components import render_section_title
 
 
-def get_launch_status(launch_date):
+def get_launch_status(launch_date, is_launched=False):
     """Return status emoji and message based on launch date proximity"""
+    if is_launched:
+        return "✅", "Launched"
+    
     if not launch_date:
         return "", ""
 
@@ -19,27 +26,121 @@ def get_launch_status(launch_date):
     days_left = (launch_date - today).days
 
     if days_left < 0:
-        return "✅", f"Launched {abs(days_left)} days ago"
+        return "⏰", f"Launch date passed ({abs(days_left)}d ago)"
     elif days_left == 0:
         return "🚀", "Launching TODAY!"
     elif days_left <= 2:
-        return "🚨", f"{days_left} day(s) left - URGENT!"
+        return "🚨", f"{days_left}d left - URGENT!"
     elif days_left <= 4:
-        return "⚠️", f"{days_left} days left - Prepare shipment!"
+        return "⚠️", f"{days_left}d left"
     else:
-        return "📅", f"{days_left} days left"
+        return "📅", f"{days_left}d left"
 
 
-def render_store_card(store):
-    """Render an editable store card"""
+def render_store_card(store, shipments_df):
+    """Render an editable store card with summary"""
     launch_date_val = store.get('launch_date')
-    emoji, status_msg = get_launch_status(launch_date_val)
+    is_launched = bool(store.get('is_launched', False))
+    emoji, status_msg = get_launch_status(launch_date_val, is_launched)
 
-    title_parts = [f"🏪 **{store['name']}**", f"📍 {store['location'] or 'N/A'}"]
-    if launch_date_val:
-        title_parts.append(f"{emoji} {status_msg}")
+    # Calculate shipped quantities
+    store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else pd.DataFrame()
+    s30 = int(store_ships['qty_30d'].sum()) if not store_ships.empty else 0
+    s40 = int(store_ships['qty_40d'].sum()) if not store_ships.empty else 0
+    s60 = int(store_ships['qty_60d'].sum()) if not store_ships.empty else 0
 
-    with st.expander(" — ".join(title_parts)):
+    r30_req = int(store['required_30d'])
+    r40_req = int(store['required_40d'])
+    r60_req = int(store['required_60d'])
+
+    rec_30 = int(store.get('received_30d', 0) or 0)
+    rec_40 = int(store.get('received_40d', 0) or 0)
+    rec_60 = int(store.get('received_60d', 0) or 0)
+
+    # Status badge color
+    if is_launched:
+        status_color = '#27ae60'
+        status_bg = 'rgba(39, 174, 96, 0.1)'
+    elif launch_date_val:
+        if isinstance(launch_date_val, str):
+            ld = date.fromisoformat(launch_date_val)
+        else:
+            ld = launch_date_val
+        days_left = (ld - date.today()).days
+        if days_left < 0:
+            status_color = '#95a5a6'
+            status_bg = 'rgba(149, 165, 166, 0.1)'
+        elif days_left <= 2:
+            status_color = '#e74c3c'
+            status_bg = 'rgba(231, 76, 60, 0.1)'
+        elif days_left <= 4:
+            status_color = '#f39c12'
+            status_bg = 'rgba(243, 156, 18, 0.1)'
+        else:
+            status_color = '#3498db'
+            status_bg = 'rgba(52, 152, 219, 0.1)'
+    else:
+        status_color = '#7f8c8d'
+        status_bg = 'rgba(127, 140, 141, 0.1)'
+
+    # Transport badge
+    transport_ready = bool(store.get('transportation_ready', False))
+    transport_badge = (
+        '<span style="background:#27ae60; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600;">✅ Transport</span>'
+        if transport_ready
+        else '<span style="background:#e74c3c; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600;">❌ Transport</span>'
+    )
+
+    status_badge = f'<span style="background:{status_color}; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600;">{emoji} {status_msg or "No Launch Date"}</span>'
+
+    # Build quantity rows
+    def qty_row(label, required, shipped, received, color):
+        pending = max(0, required - shipped)
+        pending_txt = f'<span style="color:#e74c3c;">({pending} pending)</span>' if pending > 0 else '<span style="color:#27ae60;">✓</span>'
+        received_txt = f'<b style="color:#16a085;">{received}</b>' if received > 0 else '<span style="opacity:0.5;">—</span>'
+        return f"""
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:{color}15; border-radius:8px; margin-bottom:4px; font-size:0.82rem;">
+            <span style="font-weight:700; color:{color}; min-width:40px;">{label}</span>
+            <span style="opacity:0.85;">Req: <b>{required}</b></span>
+            <span style="opacity:0.85;">Ship: <b>{shipped}</b></span>
+            <span style="opacity:0.85;">Rec: {received_txt}</span>
+            <span style="font-size:0.75rem;">{pending_txt}</span>
+        </div>
+        """
+
+    qty_html = qty_row('🔵 30D', r30_req, s30, rec_30, '#3498db')
+    qty_html += qty_row('🟠 40D', r40_req, s40, rec_40, '#e67e22')
+    qty_html += qty_row('🟣 60D', r60_req, s60, rec_60, '#9b59b6')
+
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {status_bg} 100%);
+                border-left: 5px solid {status_color};
+                border-radius: 14px;
+                padding: 18px 20px;
+                margin-bottom: 14px;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.08);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+            <div>
+                <div style="font-size:1.15rem; font-weight:700;">
+                    🏪 {store['name']}
+                </div>
+                <div style="font-size:0.82rem; opacity:0.75; margin-top:2px;">
+                    📍 {store['location'] or 'N/A'}
+                </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                {status_badge}
+                {transport_badge}
+            </div>
+        </div>
+        <div style="margin-top:10px;">
+            {qty_html}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Edit form in expander
+    with st.expander(f"✏️ Edit **{store['name']}**", expanded=False):
         with st.form(f"edit_{store['id']}"):
             c1, c2 = st.columns(2)
             name = c1.text_input("Name", value=store['name'], key=f"n_{store['id']}")
@@ -58,16 +159,31 @@ def render_store_card(store):
                 value=current_launch,
                 key=f"ld_{store['id']}"
             )
-            transportation_ready_edit = c2.checkbox(
+            is_launched_edit = c2.checkbox(
+                "✅ Already Launched",
+                value=is_launched,
+                key=f"il_{store['id']}",
+                help="Tick if this store has already launched"
+            )
+
+            transportation_ready_edit = st.checkbox(
                 "🚚 Transportation Ready",
-                value=bool(store.get('transportation_ready', False)),
+                value=transport_ready,
                 key=f"tr_{store['id']}"
             )
 
+            st.markdown("**📋 Required Quantities:**")
             c1, c2, c3 = st.columns(3)
-            r30 = c1.number_input("🔵 Required 30D", min_value=0, value=int(store['required_30d']), key=f"r30_{store['id']}")
-            r40 = c2.number_input("🟠 Required 40D", min_value=0, value=int(store['required_40d']), key=f"r40_{store['id']}")
-            r60 = c3.number_input("🟣 Required 60D", min_value=0, value=int(store['required_60d']), key=f"r60_{store['id']}")
+            r30 = c1.number_input("🔵 Required 30D", min_value=0, value=r30_req, key=f"r30_{store['id']}")
+            r40 = c2.number_input("🟠 Required 40D", min_value=0, value=r40_req, key=f"r40_{store['id']}")
+            r60 = c3.number_input("🟣 Required 60D", min_value=0, value=r60_req, key=f"r60_{store['id']}")
+
+            st.markdown("**📥 Actually Received at Store:**")
+            st.caption("💡 Update these when the store confirms receipt of dividers")
+            c1, c2, c3 = st.columns(3)
+            rec30 = c1.number_input("🔵 Received 30D", min_value=0, value=rec_30, key=f"rec30_{store['id']}")
+            rec40 = c2.number_input("🟠 Received 40D", min_value=0, value=rec_40, key=f"rec40_{store['id']}")
+            rec60 = c3.number_input("🟣 Received 60D", min_value=0, value=rec_60, key=f"rec60_{store['id']}")
 
             c1, c2 = st.columns(2)
             update_btn = c1.form_submit_button("💾 Update", use_container_width=True)
@@ -76,7 +192,8 @@ def render_store_card(store):
             if update_btn:
                 update_store(
                     store['id'], name, location, r30, r40, r60,
-                    launch_date_edit, transportation_ready_edit
+                    launch_date_edit, transportation_ready_edit,
+                    is_launched_edit, rec30, rec40, rec60
                 )
                 st.success("✅ Updated!")
                 st.rerun()
@@ -85,6 +202,102 @@ def render_store_card(store):
                 delete_store(store['id'])
                 st.warning("🗑️ Deleted!")
                 st.rerun()
+
+
+def render_discrepancy_section(stores_df, shipments_df):
+    """Render the discrepancy section showing differences between shipped and received"""
+    disc_df = get_discrepancies(stores_df, shipments_df)
+    
+    if disc_df.empty:
+        render_section_title("⚖️ Shipped vs Received")
+        st.markdown("""
+        <div style="background: rgba(39, 174, 96, 0.1); padding: 16px 20px; border-radius: 10px; 
+                    border-left: 4px solid #27ae60; margin-bottom: 16px;">
+            ✅ <b>No discrepancies detected!</b> All received quantities match shipments (or no received data entered yet).
+        </div>
+        """, unsafe_allow_html=True)
+        return
+
+    # Split into excess and shortage
+    excess_stores = []
+    shortage_stores = []
+    
+    for _, row in disc_df.iterrows():
+        has_excess = row['diff_30d'] > 0 or row['diff_40d'] > 0 or row['diff_60d'] > 0
+        has_shortage = row['diff_30d'] < 0 or row['diff_40d'] < 0 or row['diff_60d'] < 0
+        
+        if has_excess:
+            excess_stores.append(row)
+        if has_shortage:
+            shortage_stores.append(row)
+
+    render_section_title(f"⚖️ Shipped vs Received ({len(disc_df)} discrepancies)")
+    st.markdown("""
+    <div style="background: rgba(243, 156, 18, 0.1); padding: 12px 18px; border-radius: 10px; 
+                border-left: 4px solid #f39c12; margin-bottom: 16px; font-size:0.9rem;">
+        💡 These stores have differences between what was shipped and what was actually received.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Excess section (received more than shipped)
+    if excess_stores:
+        st.markdown(f"### 📈 Excess — Received MORE than Shipped ({len(excess_stores)})")
+        for row in excess_stores:
+            render_discrepancy_card(row, 'excess')
+
+    # Shortage section (received less than shipped)
+    if shortage_stores:
+        st.markdown(f"### 📉 Shortage — Received LESS than Shipped ({len(shortage_stores)})")
+        for row in shortage_stores:
+            render_discrepancy_card(row, 'shortage')
+
+
+def render_discrepancy_card(row, kind):
+    """Render a discrepancy card (excess or shortage)"""
+    color = '#e67e22' if kind == 'excess' else '#e74c3c'
+    icon = '📈' if kind == 'excess' else '📉'
+    
+    def diff_html(label, shipped, received, diff, dcolor):
+        if diff == 0:
+            return f"""
+            <div style="background:rgba(127,140,141,0.1); padding:8px 12px; border-radius:8px; flex:1; min-width:130px;">
+                <div style="font-size:0.7rem; opacity:0.6;">{label}</div>
+                <div style="font-size:0.75rem; opacity:0.7;">Ship: {shipped} | Rec: {received}</div>
+                <div style="font-weight:700; opacity:0.6;">—</div>
+            </div>
+            """
+        sign = '+' if diff > 0 else ''
+        return f"""
+        <div style="background:{dcolor}20; padding:8px 12px; border-radius:8px; flex:1; min-width:130px; border:1.5px solid {dcolor}60;">
+            <div style="font-size:0.7rem; opacity:0.8; color:{dcolor};"><b>{label}</b></div>
+            <div style="font-size:0.72rem; opacity:0.8;">Ship: {shipped} | Rec: {received}</div>
+            <div style="font-weight:800; color:{dcolor}; font-size:1rem;">{sign}{diff}</div>
+        </div>
+        """
+
+    html_30 = diff_html('🔵 30D', row['shipped_30d'], row['received_30d'], row['diff_30d'], '#3498db')
+    html_40 = diff_html('🟠 40D', row['shipped_40d'], row['received_40d'], row['diff_40d'], '#e67e22')
+    html_60 = diff_html('🟣 60D', row['shipped_60d'], row['received_60d'], row['diff_60d'], '#9b59b6')
+
+    st.markdown(f"""
+    <div style="background: rgba(255,255,255,0.02);
+                border-left: 5px solid {color};
+                border-radius: 12px;
+                padding: 14px 18px;
+                margin-bottom: 10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+            <div>
+                <span style="font-weight:700; font-size:1.05rem;">{icon} 🏪 {row['name']}</span>
+                <span style="opacity:0.7; font-size:0.85rem;"> — 📍 {row['location']}</span>
+            </div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            {html_30}
+            {html_40}
+            {html_60}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render():
@@ -101,39 +314,88 @@ def render():
             c1, c2 = st.columns(2)
             launch_date_input = c1.date_input(
                 "🚀 Launch Date (optional)",
-                value=None,
-                min_value=date.today()
+                value=None
             )
-            transportation_ready = c2.checkbox("🚚 Transportation Ready", value=False)
+            is_launched_new = c2.checkbox(
+                "✅ Already Launched",
+                value=False,
+                help="Tick if this is an old store that has already launched"
+            )
 
+            transportation_ready = st.checkbox("🚚 Transportation Ready", value=False)
+
+            st.markdown("**📋 Required Quantities:**")
             c1, c2, c3 = st.columns(3)
             r30 = c1.number_input("🔵 Required 30D", min_value=0, value=0)
             r40 = c2.number_input("🟠 Required 40D", min_value=0, value=0)
             r60 = c3.number_input("🟣 Required 60D", min_value=0, value=0)
 
+            st.markdown("**📥 Actually Received (if already launched):**")
+            c1, c2, c3 = st.columns(3)
+            rec30_new = c1.number_input("🔵 Received 30D", min_value=0, value=0)
+            rec40_new = c2.number_input("🟠 Received 40D", min_value=0, value=0)
+            rec60_new = c3.number_input("🟣 Received 60D", min_value=0, value=0)
+
             submitted = st.form_submit_button("➕ Add Store", use_container_width=True)
             if submitted and name:
-                add_store(name, location, r30, r40, r60, launch_date_input, transportation_ready)
+                add_store(
+                    name, location, r30, r40, r60,
+                    launch_date_input, transportation_ready,
+                    is_launched_new, rec30_new, rec40_new, rec60_new
+                )
                 st.success(f"✅ Store '{name}' added!")
                 st.rerun()
 
-    # List all stores (2 per row)
-    render_section_title("📋 All Stores")
     stores_df = get_stores()
+    shipments_df = get_shipments()
 
     if stores_df.empty:
         st.info("📭 No stores added yet.")
         return
 
-    stores_list = list(stores_df.iterrows())
+    # Discrepancy section
+    render_discrepancy_section(stores_df, shipments_df)
+
+    # Stats
+    render_section_title("📊 Stores Overview")
+    total_stores = len(stores_df)
+    launched = len(stores_df[stores_df['is_launched'] == True]) if 'is_launched' in stores_df.columns else 0
+    upcoming = total_stores - launched
     
-    # Iterate 2 at a time
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🏪 Total Stores", total_stores)
+    c2.metric("✅ Launched", launched)
+    c3.metric("🚀 Upcoming", upcoming)
+
+    # Filter
+    render_section_title("📋 All Stores")
+    
+    col_filter1, col_filter2 = st.columns([1, 3])
+    with col_filter1:
+        status_filter = st.selectbox(
+            "Filter",
+            ['All', 'Launched only', 'Upcoming only'],
+            key='store_filter',
+            label_visibility="collapsed"
+        )
+
+    filtered_df = stores_df.copy()
+    if status_filter == 'Launched only':
+        filtered_df = filtered_df[filtered_df['is_launched'] == True]
+    elif status_filter == 'Upcoming only':
+        filtered_df = filtered_df[filtered_df['is_launched'] != True]
+
+    if filtered_df.empty:
+        st.info("📭 No stores match the filter.")
+        return
+
+    # Render stores 2 per row
+    stores_list = list(filtered_df.iterrows())
+
     for i in range(0, len(stores_list), 2):
         c1, c2 = st.columns(2)
-        
         with c1:
-            render_store_card(stores_list[i][1])
-        
+            render_store_card(stores_list[i][1], shipments_df)
         if i + 1 < len(stores_list):
             with c2:
-                render_store_card(stores_list[i + 1][1])
+                render_store_card(stores_list[i + 1][1], shipments_df)
