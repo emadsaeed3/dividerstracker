@@ -26,6 +26,43 @@ from components import render_sidebar, get_logo_base64
 load_css()
 inject_arrow_killer()
 
+# Extra CSS for welcome cards
+st.markdown("""
+<style>
+.welcome-container {
+    text-align: center;
+    padding: 40px 20px;
+}
+.welcome-logo {
+    max-width: 220px;
+    margin-bottom: 20px;
+}
+.welcome-title {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    font-weight: 800;
+}
+.welcome-subtitle {
+    font-size: 1.1rem;
+    opacity: 0.75;
+    margin-bottom: 40px;
+}
+
+/* Style the welcome section buttons */
+.welcome-buttons button {
+    height: 180px !important;
+    font-size: 1.1rem !important;
+    border-radius: 16px !important;
+    font-weight: 700 !important;
+    transition: all 0.3s ease !important;
+}
+.welcome-buttons button:hover {
+    transform: translateY(-6px) !important;
+    box-shadow: 0 12px 35px rgba(52, 152, 219, 0.4) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Render sidebar and get the selected page
 page = render_sidebar()
 
@@ -34,40 +71,48 @@ if st.session_state.section is None:
     logo_b64 = get_logo_base64()
     logo_html = ""
     if logo_b64:
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="max-width:220px; margin-bottom:20px;" />'
-    
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" class="welcome-logo" />'
+
     st.markdown(f"""
-    <div style="text-align:center; padding:60px 20px;">
+    <div class="welcome-container">
         {logo_html}
-        <h1 style="font-size:2.5rem; margin-bottom:10px;">Welcome to Launch Team Tracker</h1>
-        <p style="font-size:1.1rem; opacity:0.75; margin-bottom:40px;">
-            Select a section from the sidebar to get started
-        </p>
-        <div style="display:flex; justify-content:center; gap:30px; flex-wrap:wrap; margin-top:30px;">
-            <div style="background: linear-gradient(135deg, rgba(52,152,219,0.1) 0%, rgba(52,152,219,0.05) 100%);
-                        border: 2px solid rgba(52,152,219,0.3); padding:30px 40px; border-radius:16px; 
-                        min-width:260px; box-shadow:0 4px 20px rgba(52,152,219,0.15);">
-                <div style="font-size:3rem;">📦</div>
-                <h3 style="margin:10px 0;">Dividers</h3>
-                <p style="opacity:0.7; font-size:0.9rem;">Track dividers, magnets, stores and shipments</p>
-            </div>
-            <div style="background: linear-gradient(135deg, rgba(155,89,182,0.1) 0%, rgba(155,89,182,0.05) 100%);
-                        border: 2px solid rgba(155,89,182,0.3); padding:30px 40px; border-radius:16px;
-                        min-width:260px; box-shadow:0 4px 20px rgba(155,89,182,0.15);">
-                <div style="font-size:3rem;">💻</div>
-                <h3 style="margin:10px 0;">4M IT Equipment</h3>
-                <p style="opacity:0.7; font-size:0.9rem;">Manage IT equipment for all RDCs</p>
-            </div>
-        </div>
+        <div class="welcome-title">Welcome to Launch Team Tracker</div>
+        <div class="welcome-subtitle">Choose a section to get started</div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Clickable buttons
+    st.markdown('<div class="welcome-buttons">', unsafe_allow_html=True)
+    
+    _, cc1, cc2, _ = st.columns([1, 2, 2, 1])
+    
+    with cc1:
+        if st.button(
+            "📦\n\n**Dividers**\n\nTrack dividers, magnets,\nstores & shipments",
+            key="welcome_dividers",
+            use_container_width=True
+        ):
+            st.session_state.section = 'dividers'
+            st.rerun()
+    
+    with cc2:
+        if st.button(
+            "💻\n\n**4M IT Equipment**\n\nManage IT equipment\nfor all RDCs",
+            key="welcome_it",
+            use_container_width=True
+        ):
+            st.session_state.section = 'it'
+            st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
 else:
     # Route based on section
     section = st.session_state.section
-    
+
     if section == 'dividers':
         from pages_app import dashboard, stores, vendor_stock, magnets, shipments, reports
-        
+
         if page is None or "Dashboard" in page:
             dashboard.render()
         elif "Stores" in page:
@@ -80,10 +125,10 @@ else:
             shipments.render()
         elif "Reports" in page:
             reports.render()
-    
+
     elif section == 'it':
         from pages_it import dashboard_it, rdcs, it_stock, it_shipments, it_reports
-        
+
         if page is None or "Dashboard" in page:
             dashboard_it.render()
         elif "RDCs" in page:
