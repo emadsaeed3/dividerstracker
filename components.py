@@ -1,9 +1,27 @@
 """
 Components module - Reusable UI components
 """
+import os
+import base64
 import streamlit as st
 import plotly.graph_objects as go
 from styles import get_plotly_theme
+
+
+# ==================== LOGO HELPER ====================
+
+def get_logo_base64():
+    """Load the appropriate logo based on dark/light mode"""
+    is_dark = st.session_state.get('dark_mode', False)
+    logo_file = "Now-PrimaryLogo-White.png" if is_dark else "Now-PrimaryLogo-Squid.png"
+    
+    try:
+        if os.path.exists(logo_file):
+            with open(logo_file, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    except Exception:
+        pass
+    return None
 
 
 # ==================== SIDEBAR ====================
@@ -11,14 +29,29 @@ from styles import get_plotly_theme
 def render_sidebar():
     """Render sidebar with navigation and dark mode toggle"""
     with st.sidebar:
-        # Logo and title
-        st.markdown("""
-        <div style="text-align:center; padding: 10px 0 20px 0;">
-            <i class="bi bi-box-seam" style="font-size:2.5rem; color:#3498db;"></i>
-            <h1 style="margin:8px 0 0 0;">Dividers Tracker</h1>
-            <p style="font-size:0.8rem; opacity:0.7; margin:0;">Management Dashboard</p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Logo
+        logo_b64 = get_logo_base64()
+        if logo_b64:
+            st.markdown(f"""
+            <div style="text-align:center; padding: 10px 0 15px 0;">
+                <img src="data:image/png;base64,{logo_b64}" 
+                     style="max-width: 160px; height: auto; margin-bottom: 8px;" />
+                <h1 style="margin:8px 0 0 0; font-size:1.3rem !important;">Dividers Tracker</h1>
+                <p style="font-size:0.75rem; opacity:0.85; margin:4px 0 0 0;">
+                    Launch Team • Amazon Now
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="text-align:center; padding: 10px 0 15px 0;">
+                <i class="bi bi-box-seam" style="font-size:2.5rem; color:#3498db;"></i>
+                <h1 style="margin:8px 0 0 0;">Dividers Tracker</h1>
+                <p style="font-size:0.75rem; opacity:0.85; margin:4px 0 0 0;">
+                    Launch Team • Amazon Now
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
         st.markdown("---")
 
@@ -47,9 +80,9 @@ def render_sidebar():
         # Footer
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
-        <div style="text-align:center; font-size:0.75rem; opacity:0.6; padding:10px;">
+        <div style="text-align:center; font-size:0.7rem; opacity:0.65; padding:10px;">
             <i class="bi bi-heart-fill" style="color:#e74c3c;"></i> Built with Streamlit<br>
-            © 2025
+            <b>Launch Team</b> © 2025
         </div>
         """, unsafe_allow_html=True)
 
@@ -114,6 +147,35 @@ def render_progress_card(dtype, required, shipped, gap):
             <div style="display:flex; justify-content:space-between; margin-top:10px;">
                 <span style="font-size:0.85rem;">{pct:.0f}% complete</span>
                 <span style="font-weight:700; color:{gap_color};">{gap_icon} {gap_label}: {gap}</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_magnet_status_card(dtype, with_magnet, without_magnet):
+    """Render a magnet status card for a divider type"""
+    color_map = {'30D': '#3498db', '40D': '#e67e22', '60D': '#9b59b6'}
+    color = color_map.get(dtype, '#3498db')
+
+    total = with_magnet + without_magnet
+    pct = (with_magnet / total * 100) if total > 0 else 0
+
+    st.markdown(f"""
+    <div class="stat-card card-{dtype.lower()}">
+        <i class="bi bi-magnet icon-bg"></i>
+        <div class="stat-label" style="color:{color};">{dtype} Magnet Status</div>
+        <div style="margin-top: 14px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span style="font-size:0.95rem;">🧲 <b>With:</b> <span style="color:#27ae60; font-weight:700;">{with_magnet}</span></span>
+                <span style="font-size:0.95rem;">⭕ <b>Without:</b> <span style="color:#e74c3c; font-weight:700;">{without_magnet}</span></span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.1);">
+                <span style="font-size:0.85rem;"><b>Total:</b> {total}</span>
+                <span style="font-size:0.85rem; font-weight:700; color:{color};">{pct:.0f}%</span>
+            </div>
+            <div class="progress-container" style="margin-top:8px;">
+                <div class="progress-fill" style="width:{pct}%; background:{color};"></div>
             </div>
         </div>
     </div>
