@@ -44,7 +44,7 @@ def get_rdcs_with_pending(rdcs_df):
     for _, rdc in filtered.iterrows():
         requirements = get_rdc_requirements_dict(rdc['id'])
         shipped = get_shipped_totals_per_rdc(rdc['id'])
-        
+
         pending = {}
         total_pending = 0
         for item in IT_EQUIPMENT_TYPES:
@@ -71,35 +71,33 @@ def get_rdcs_with_pending(rdcs_df):
 
 
 def render_scheduled_card(row, idx):
-    """Render a scheduled shipment card"""
+    """Render a scheduled shipment card (half width)"""
     days_left = row['days_left']
 
     if days_left <= 1:
         urgency_color = '#e74c3c'
         urgency_icon = '🚨'
-        urgency_label = 'URGENT'
     elif days_left <= 3:
         urgency_color = '#f39c12'
         urgency_icon = '⚠️'
-        urgency_label = 'SOON'
     else:
         urgency_color = '#3498db'
         urgency_icon = '📅'
-        urgency_label = 'UPCOMING'
 
     transport_badge = (
-        '<span style="background:#27ae60; color:white; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:600;">✅ Transport Ready</span>'
+        '<span style="background:#27ae60; color:white; padding:3px 8px; border-radius:10px; font-size:0.7rem; font-weight:600;">✅ Transport Ready</span>'
         if row['transportation_ready']
-        else '<span style="background:#e74c3c; color:white; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:600;">❌ Transport NOT Ready</span>'
+        else '<span style="background:#e74c3c; color:white; padding:3px 8px; border-radius:10px; font-size:0.7rem; font-weight:600;">❌ Transport NOT Ready</span>'
     )
 
-    # Build pending items chips
+    # Build pending items chips (only non-zero)
     pending_chips = ""
     for item, qty in row['pending'].items():
         if qty > 0:
+            short = item.replace('Wireless Scanner - ', 'WS-').replace('Charger Wireless Scanner - ', 'Chrg-').replace('Yubikey - Security Key', 'Yubikey').replace('Zebra ZD621', 'Zebra')
             pending_chips += f"""
-            <div style="background:rgba(52,152,219,0.15); padding:6px 12px; border-radius:8px; font-size:0.8rem;">
-                <b>{item}:</b> <span style="color:#3498db; font-weight:700;">{qty}</span>
+            <div style="background:rgba(52,152,219,0.15); padding:4px 8px; border-radius:6px; font-size:0.72rem;">
+                <b>{short}:</b> <span style="color:#3498db; font-weight:700;">{qty}</span>
             </div>
             """
 
@@ -107,32 +105,32 @@ def render_scheduled_card(row, idx):
     <div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {urgency_color}15 100%);
                 border-left: 5px solid {urgency_color};
                 border-radius: 14px;
-                padding: 20px 24px;
+                padding: 16px 18px;
                 margin-bottom: 14px;
                 box-shadow: 0 4px 16px rgba(0,0,0,0.08);">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
             <div>
-                <div style="font-size:1.25rem; font-weight:700;">
-                    🏢 {row['name']} <span style="opacity:0.6; font-weight:500; font-size:1rem;">• 📍 {row['location']}</span>
+                <div style="font-size:1.05rem; font-weight:700;">
+                    🏢 {row['name']}
                 </div>
-                <div style="margin-top:6px; font-size:0.85rem; opacity:0.85;">
-                    🚀 Launch: <b>{row['launch_date']}</b> &nbsp;|&nbsp; 📆 Ship by: <b>{row['ship_by']}</b> &nbsp;|&nbsp; 📦 Pending: <b>{row['total_pending']}</b> items
+                <div style="font-size:0.8rem; opacity:0.7; margin-top:2px;">
+                    📍 {row['location']}
                 </div>
             </div>
-            <div style="text-align:right;">
-                <div style="background:{urgency_color}; color:white; padding:6px 14px; border-radius:20px; font-weight:700; font-size:0.85rem;">
-                    {urgency_icon} {urgency_label} • {row['days_left']} day(s) left
-                </div>
-                <div style="margin-top:8px;">{transport_badge}</div>
+            <div style="background:{urgency_color}; color:white; padding:4px 10px; border-radius:20px; font-weight:700; font-size:0.72rem;">
+                {urgency_icon} {row['days_left']}d left
             </div>
         </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; padding-top:12px; border-top:1px dashed rgba(127,140,141,0.3);">
+        <div style="font-size:0.78rem; opacity:0.85; margin-bottom:8px;">
+            🚀 Launch: <b>{row['launch_date']}</b> | 📆 Ship by: <b>{row['ship_by']}</b> | 📦 <b>{row['total_pending']}</b> items
+        </div>
+        <div style="margin-bottom:8px;">{transport_badge}</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; padding-top:10px; border-top:1px dashed rgba(127,140,141,0.3);">
             {pending_chips}
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Quick shipment form
     with st.expander(f"🚀 Create Shipment for **{row['name']}**", expanded=False):
         with st.form(f"quick_ship_it_{row['id']}_{idx}", clear_on_submit=True):
             c1, c2 = st.columns(2)
@@ -147,16 +145,14 @@ def render_scheduled_card(row, idx):
 
             st.markdown("**📦 Items to Ship:**")
             items_to_ship = {}
-            cols = st.columns(2)
-            for i, item in enumerate(IT_EQUIPMENT_TYPES):
-                with cols[i % 2]:
-                    pending_qty = int(row['pending'].get(item, 0))
-                    items_to_ship[item] = st.number_input(
-                        f"{item} (Pending: {pending_qty})",
-                        min_value=0,
-                        value=pending_qty,
-                        key=f"item_{row['id']}_{idx}_{item}"
-                    )
+            for item in IT_EQUIPMENT_TYPES:
+                pending_qty = int(row['pending'].get(item, 0))
+                items_to_ship[item] = st.number_input(
+                    f"{item} (Pending: {pending_qty})",
+                    min_value=0,
+                    value=pending_qty,
+                    key=f"item_{row['id']}_{idx}_{item}"
+                )
 
             notes = st.text_area("📝 Notes", key=f"nt_{row['id']}_{idx}")
 
@@ -175,7 +171,7 @@ def render_scheduled_card(row, idx):
 
 
 def render_shipment_card(ship, idx):
-    """Render a full-width shipment card"""
+    """Render a shipment card (half width)"""
     status = ship.get('delivery_status') or 'Pending'
     cfg = STATUS_CONFIG.get(status, STATUS_CONFIG['Pending'])
 
@@ -184,61 +180,60 @@ def render_shipment_card(ship, idx):
     notes = ship.get('notes') or '—'
     receiver = ship.get('receiver_name') or '—'
     contact = ship.get('receiver_contact') or ''
-    
+
     # Get items
     items_df = get_it_shipment_items(ship['id'])
     total_items = int(items_df['quantity'].sum()) if not items_df.empty else 0
-    
+
     # Build items chips
     items_chips = ""
     if not items_df.empty:
         for _, it in items_df.iterrows():
+            short = it['equipment_type'].replace('Wireless Scanner - ', 'WS-').replace('Charger Wireless Scanner - ', 'Chrg-').replace('Yubikey - Security Key', 'Yubikey').replace('Zebra ZD621', 'Zebra')
             items_chips += f"""
-            <div style="background:rgba(52,152,219,0.15); padding:8px 14px; border-radius:10px; min-width:140px;">
-                <div style="font-size:0.72rem; opacity:0.7;">{it['equipment_type']}</div>
-                <div style="font-weight:700; font-size:1.1rem; color:#3498db;">{int(it['quantity'])}</div>
+            <div style="background:rgba(52,152,219,0.15); padding:5px 10px; border-radius:8px; font-size:0.72rem;">
+                <b>{short}:</b> <span style="color:#3498db; font-weight:700;">{int(it['quantity'])}</span>
             </div>
             """
     else:
-        items_chips = '<div style="opacity:0.6;">No items</div>'
+        items_chips = '<div style="opacity:0.6; font-size:0.75rem;">No items</div>'
 
-    receiver_line = f"👤 <b>Receiver:</b> {receiver}"
+    receiver_line = f"👤 <b>{receiver}</b>"
     if contact:
-        receiver_line += f" &nbsp;|&nbsp; 📞 {contact}"
+        receiver_line += f" | 📞 {contact}"
 
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {cfg['bg']} 100%);
                 border-left: 5px solid {cfg['color']};
                 border-radius: 14px;
-                padding: 20px 24px;
+                padding: 16px 18px;
                 margin-bottom: 14px;
                 box-shadow: 0 4px 16px rgba(0,0,0,0.08);">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
             <div>
-                <div style="font-size:1.25rem; font-weight:700;">
+                <div style="font-size:1.05rem; font-weight:700;">
                     🏢 {ship['rdc_name']}
-                    <span style="opacity:0.5; font-weight:500; font-size:0.95rem;">#{ship['id']}</span>
+                    <span style="opacity:0.5; font-weight:500; font-size:0.78rem;">#{ship['id']}</span>
                 </div>
-                <div style="margin-top:6px; font-size:0.85rem; opacity:0.85;">
-                    📅 Shipped: <b>{ship['date']}</b> &nbsp;|&nbsp; 📆 Scheduled: <b>{scheduled_str}</b>
+                <div style="font-size:0.78rem; opacity:0.85; margin-top:3px;">
+                    📅 {ship['date']} | 📆 {scheduled_str}
                 </div>
-                <div style="margin-top:4px; font-size:0.85rem; opacity:0.85;">
+                <div style="font-size:0.78rem; opacity:0.85; margin-top:2px;">
                     {receiver_line}
                 </div>
             </div>
-            <div style="background:{cfg['color']}; color:white; padding:8px 18px; border-radius:20px; font-weight:700; font-size:0.9rem;">
+            <div style="background:{cfg['color']}; color:white; padding:4px 10px; border-radius:20px; font-weight:700; font-size:0.72rem;">
                 {cfg['emoji']} {status}
             </div>
         </div>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
             {items_chips}
-            <div style="background:rgba(127,140,141,0.15); padding:8px 14px; border-radius:10px; min-width:100px;">
-                <div style="font-size:0.72rem; opacity:0.7;">📦 Total</div>
-                <div style="font-weight:700; font-size:1.1rem;">{total_items}</div>
+            <div style="background:rgba(127,140,141,0.15); padding:5px 10px; border-radius:8px; font-size:0.72rem;">
+                <b>Total:</b> <span style="font-weight:700;">{total_items}</span>
             </div>
         </div>
-        <div style="padding-top:10px; border-top:1px dashed rgba(127,140,141,0.3); font-size:0.85rem; opacity:0.9;">
-            📝 <b>Notes:</b> {notes}
+        <div style="padding-top:8px; border-top:1px dashed rgba(127,140,141,0.3); font-size:0.78rem; opacity:0.85;">
+            📝 {notes}
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -252,16 +247,14 @@ def render_shipment_card(ship, idx):
         key=f"it_status_{ship['id']}_{idx}",
         label_visibility="collapsed"
     )
-    if c2.button("💾 Update", key=f"it_upd_{ship['id']}_{idx}", use_container_width=True):
+    if c2.button("💾", key=f"it_upd_{ship['id']}_{idx}", use_container_width=True, help="Update Status"):
         update_it_shipment_status(ship['id'], new_status)
-        st.success(f"✅ Updated to {new_status}")
+        st.success("✅ Updated")
         st.rerun()
-    if c3.button("🗑️ Delete", key=f"it_del_{ship['id']}_{idx}", use_container_width=True):
+    if c3.button("🗑️", key=f"it_del_{ship['id']}_{idx}", use_container_width=True, help="Delete"):
         delete_it_shipment(ship['id'])
-        st.warning(f"🗑️ Deleted #{ship['id']}")
+        st.warning("🗑️ Deleted")
         st.rerun()
-
-    st.markdown("<br>", unsafe_allow_html=True)
 
 
 def render():
@@ -275,7 +268,7 @@ def render():
         st.warning("⚠️ Add an RDC first.")
         return
 
-    # Scheduled Shipments
+    # SCHEDULED SHIPMENTS SECTION (2 per row)
     scheduled_df = get_rdcs_with_pending(rdcs_df)
 
     if not scheduled_df.empty:
@@ -283,13 +276,18 @@ def render():
         st.markdown("""
         <div style="background: rgba(52, 152, 219, 0.1); padding: 12px 18px; border-radius: 10px; 
                     border-left: 4px solid #3498db; margin-bottom: 16px; font-size:0.9rem;">
-            💡 Auto-suggested shipments for RDCs with upcoming launch dates and pending items.
-            <b>Ship by = Launch Date - 1 day</b>
+            💡 Auto-suggested shipments for RDCs with upcoming launch dates. <b>Ship by = Launch Date - 1 day</b>
         </div>
         """, unsafe_allow_html=True)
 
-        for idx, (_, row) in enumerate(scheduled_df.iterrows()):
-            render_scheduled_card(row, idx)
+        scheduled_list = list(scheduled_df.iterrows())
+        for i in range(0, len(scheduled_list), 2):
+            c1, c2 = st.columns(2)
+            with c1:
+                render_scheduled_card(scheduled_list[i][1], i)
+            if i + 1 < len(scheduled_list):
+                with c2:
+                    render_scheduled_card(scheduled_list[i + 1][1], i + 1)
 
     # Manual Add
     render_section_title("➕ Manual Shipment Entry")
@@ -345,30 +343,36 @@ def render():
                     st.success("✅ Shipment recorded!")
                     st.rerun()
 
-    # All Shipments
-    render_section_title("📋 All Shipments")
-
+    # All Shipments with Filter beside title
     if shipments_df.empty:
+        render_section_title("📋 All Shipments")
         st.info("📭 No shipments yet.")
         return
 
-    # Filter & Stats
-    c1, c2, c3, c4, c5 = st.columns(5)
-    status_filter = c1.selectbox(
-        "Filter by Status",
-        ['All'] + DELIVERY_STATUSES,
-        key='it_status_filter'
-    )
+    # Title + Filter on same row
+    col_title, col_filter = st.columns([2, 1])
+    with col_title:
+        render_section_title(f"📋 All Shipments ({len(shipments_df)})")
+    with col_filter:
+        st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
+        status_filter = st.selectbox(
+            "Filter by Status",
+            ['All'] + DELIVERY_STATUSES,
+            key='it_status_filter',
+            label_visibility="collapsed"
+        )
 
+    # Status stats
     pending = len(shipments_df[shipments_df['delivery_status'] == 'Pending']) if 'delivery_status' in shipments_df.columns else 0
     transit = len(shipments_df[shipments_df['delivery_status'] == 'In Transit']) if 'delivery_status' in shipments_df.columns else 0
     delivered = len(shipments_df[shipments_df['delivery_status'] == 'Delivered']) if 'delivery_status' in shipments_df.columns else 0
     delayed = len(shipments_df[shipments_df['delivery_status'] == 'Delayed']) if 'delivery_status' in shipments_df.columns else 0
 
-    c2.metric("🟡 Pending", pending)
-    c3.metric("🔵 In Transit", transit)
-    c4.metric("🟢 Delivered", delivered)
-    c5.metric("🔴 Delayed", delayed)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🟡 Pending", pending)
+    c2.metric("🔵 In Transit", transit)
+    c3.metric("🟢 Delivered", delivered)
+    c4.metric("🔴 Delayed", delayed)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -380,5 +384,12 @@ def render():
         st.info(f"📭 No shipments with status '{status_filter}'.")
         return
 
-    for idx, (_, ship) in enumerate(filtered_df.iterrows()):
-        render_shipment_card(ship, idx)
+    # Render 2 cards per row
+    ships_list = list(filtered_df.iterrows())
+    for i in range(0, len(ships_list), 2):
+        c1, c2 = st.columns(2)
+        with c1:
+            render_shipment_card(ships_list[i][1], i)
+        if i + 1 < len(ships_list):
+            with c2:
+                render_shipment_card(ships_list[i + 1][1], i + 1)
