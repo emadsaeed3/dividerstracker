@@ -34,7 +34,7 @@ st.markdown("""
     padding: 40px 20px;
 }
 .welcome-logo {
-    max-width: 140px;
+    max-width: 40px;
     height: auto;
     margin-bottom: 20px;
 }
