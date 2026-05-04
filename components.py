@@ -13,7 +13,7 @@ from styles import get_plotly_theme
 def get_logo_base64(force_white=False):
     """Load the appropriate logo based on dark/light mode"""
     is_dark = st.session_state.get('dark_mode', False)
-    
+
     if force_white or is_dark:
         logo_file = "Now-PrimaryLogo-White.png"
     else:
@@ -32,12 +32,12 @@ def get_logo_base64(force_white=False):
 
 def render_sidebar():
     """Render sidebar with section switcher + navigation"""
-    # Initialize section state
+    # Initialize session state
     if 'section' not in st.session_state:
-        st.session_state.section = 'dividers'
+        st.session_state.section = None  # None = no section chosen yet
 
     with st.sidebar:
-        # Logo (always white in sidebar since sidebar has dark bg)
+        # Logo
         logo_b64 = get_logo_base64(force_white=True)
         if logo_b64:
             st.markdown(f"""
@@ -63,74 +63,74 @@ def render_sidebar():
 
         st.markdown("---")
 
-        # Section Switcher (Toggle buttons)
+        # Section Switcher (Stacked - one above the other)
         st.markdown("""
         <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
                     letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
-            🔄 Section
-        </div>
-        """, unsafe_allow_html=True)
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            dividers_active = st.session_state.section == 'dividers'
-            if st.button(
-                "📦 Dividers",
-                use_container_width=True,
-                key="btn_dividers",
-                type="primary" if dividers_active else "secondary"
-            ):
-                st.session_state.section = 'dividers'
-                st.rerun()
-        
-        with c2:
-            it_active = st.session_state.section == 'it'
-            if st.button(
-                "💻 4M IT",
-                use_container_width=True,
-                key="btn_it",
-                type="primary" if it_active else "secondary"
-            ):
-                st.session_state.section = 'it'
-                st.rerun()
-
-        st.markdown("---")
-
-        # Navigation (changes based on section)
-        st.markdown("""
-        <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
-                    letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
-            📍 Navigation
+            🔄 Select Section
         </div>
         """, unsafe_allow_html=True)
 
-        if st.session_state.section == 'dividers':
-            page = st.radio(
-                "Navigation",
-                [
-                    "📊  Dashboard",
-                    "🏪  Stores",
-                    "📦  Vendor Stock",
-                    "🧲  Magnets",
-                    "🚚  Shipments",
-                    "📈  Reports"
-                ],
-                label_visibility="collapsed",
-                key="nav_dividers"
-            )
-        else:
-            page = st.radio(
-                "Navigation",
-                [
-                    "📊  Dashboard",
-                    "🏢  RDCs",
-                    "💻  IT Stock",
-                    "🚚  Shipments",
-                    "📈  Reports"
-                ],
-                label_visibility="collapsed",
-                key="nav_it"
-            )
+        dividers_active = st.session_state.section == 'dividers'
+        if st.button(
+            "📦 Dividers",
+            use_container_width=True,
+            key="btn_dividers",
+            type="primary" if dividers_active else "secondary"
+        ):
+            st.session_state.section = 'dividers'
+            st.rerun()
+
+        st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
+
+        it_active = st.session_state.section == 'it'
+        if st.button(
+            "💻 4M IT Equipment",
+            use_container_width=True,
+            key="btn_it",
+            type="primary" if it_active else "secondary"
+        ):
+            st.session_state.section = 'it'
+            st.rerun()
+
+        # Navigation only shows AFTER a section is selected
+        page = None
+        if st.session_state.section is not None:
+            st.markdown("---")
+            st.markdown("""
+            <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
+                        letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
+                📍 Navigation
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.session_state.section == 'dividers':
+                page = st.radio(
+                    "Navigation",
+                    [
+                        "📊  Dashboard",
+                        "🏪  Stores",
+                        "📦  Vendor Stock",
+                        "🧲  Magnets",
+                        "🚚  Shipments",
+                        "📈  Reports"
+                    ],
+                    label_visibility="collapsed",
+                    key="nav_dividers"
+                )
+            else:
+                page = st.radio(
+                    "Navigation",
+                    [
+                        "📊  Dashboard",
+                        "🏢  RDCs",
+                        "💻  IT Stock",
+                        "🚚  Shipments",
+                        "📈  Reports"
+                    ],
+                    label_visibility="collapsed",
+                    key="nav_it"
+                )
 
         st.markdown("---")
 
