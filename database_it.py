@@ -159,8 +159,54 @@ def update_rdc(rdc_id, name, location, launch_date=None, transportation_ready=Fa
 
 
 def delete_rdc(rdc_id):
-    """Delete an RDC"""
+    """Delete an RDC and all its related shipments and history"""
     supabase = get_client()
+
+    # Get all shipments for this RDC
+    ships_res = supabase.table('it_shipments').select('*').eq('rdc_id', rdc_id).execute()
+
+    if ships_res.data:
+        for ship in ships_res.data:
+            ship_id = ship['id']
+            
+            # Get items in this shipment
+            items_res = supabase.table('it_shipment_items').select('*').eq('shipment_id', ship_id).execute()
+            
+            # Return items to stock
+            if items_res.data:
+                for item in items_res.data:
+                    equipment_type = item['equipment_type']
+                    qty = int(item.get('quantity', 0) or 0)
+                    
+                    if qty > 0:
+                        stock_res = supabase.table('it_equipment_stock').select('*').eq('equipment_type', equipment_type).execute()
+                        if stock_res.data:
+                            old_qty = stock_res.data[0]['quantity']
+                            new_qty = old_qty + qty
+                            
+                            supabase.table('it_equipment_stock').update({
+                                'quantity': new_qty,
+                                'last_updated': datetime.utcnow().isoformat()
+                            }).eq('equipment_type', equipment_type).execute()
+            
+            # Delete the shipment (items will cascade)
+            supabase.table('it_shipments').delete().eq('id', ship_id).execute()
+
+    # Clean up IT stock history related to this RDC
+    try:
+        hist_res = supabase.table('it_stock_history').select('*').execute()
+        if hist_res.data:
+            for entry in hist_res.data:
+                note = entry.get('note') or ''
+                if f'RDC #{rdc_id}' in note:
+                    supabase.table('it_stock_history').delete().eq('id', entry['id']).execute()
+    except Exception:
+        pass
+
+    # Delete requirements
+    supabase.table('rdc_requirements').delete().eq('rdc_id', rdc_id).execute()
+    
+    # Delete the RDC
     supabase.table('rdcs').delete().eq('id', rdc_id).execute()
 
 
