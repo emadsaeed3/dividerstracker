@@ -1,5 +1,5 @@
 """
-Stores management page
+Stores management page (no transportation field - moved to shipments)
 """
 import streamlit as st
 import pandas as pd
@@ -12,7 +12,6 @@ from components import render_section_title
 
 
 def _to_date(value):
-    """Convert any date-like value to a python date object"""
     if value is None:
         return None
     if isinstance(value, date) and not isinstance(value, datetime):
@@ -33,7 +32,6 @@ def _to_date(value):
 
 
 def get_launch_status(launch_date, is_launched=False):
-    """Return status emoji and message based on launch date proximity"""
     if is_launched:
         return "✅", "Launched"
 
@@ -57,12 +55,10 @@ def get_launch_status(launch_date, is_launched=False):
 
 
 def render_store_card(store, shipments_df):
-    """Render an editable store card with summary"""
     launch_date_val = store.get('launch_date')
     is_launched = bool(store.get('is_launched', False))
     emoji, status_msg = get_launch_status(launch_date_val, is_launched)
 
-    # Calculate shipped quantities
     store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else pd.DataFrame()
     s30 = int(store_ships['qty_30d'].sum()) if not store_ships.empty else 0
     s40 = int(store_ships['qty_40d'].sum()) if not store_ships.empty else 0
@@ -76,7 +72,6 @@ def render_store_card(store, shipments_df):
     rec_40 = int(store.get('received_40d', 0) or 0)
     rec_60 = int(store.get('received_60d', 0) or 0)
 
-    # Status badge color
     launch_date_obj = _to_date(launch_date_val)
     if is_launched:
         status_color = '#27ae60'
@@ -99,17 +94,9 @@ def render_store_card(store, shipments_df):
         status_color = '#7f8c8d'
         status_bg = 'rgba(127, 140, 141, 0.1)'
 
-    # Transport badge
-    transport_ready = bool(store.get('transportation_ready', False))
-    if transport_ready:
-        transport_badge = '<span style="background:#27ae60; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600;">✅ Transport</span>'
-    else:
-        transport_badge = '<span style="background:#e74c3c; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600;">❌ Transport</span>'
-
     status_text = status_msg if status_msg else "No Launch Date"
     status_badge = '<span style="background:' + status_color + '; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600;">' + emoji + ' ' + status_text + '</span>'
 
-    # Build quantity rows
     def qty_row(label, required, shipped, received, color):
         pending = max(0, required - shipped)
         if pending > 0:
@@ -139,7 +126,6 @@ def render_store_card(store, shipments_df):
     qty_html += qty_row('🟠 40D', r40_req, s40, rec_40, '#e67e22')
     qty_html += qty_row('🟣 60D', r60_req, s60, rec_60, '#9b59b6')
 
-    # Build the full card HTML
     card_html = (
         '<div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, ' + status_bg + ' 100%);'
         'border-left: 5px solid ' + status_color + ';'
@@ -153,7 +139,7 @@ def render_store_card(store, shipments_df):
         '<div style="font-size:0.82rem; opacity:0.75; margin-top:2px;">📍 ' + str(store['location'] or 'N/A') + '</div>'
         '</div>'
         '<div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">'
-        + status_badge + transport_badge +
+        + status_badge +
         '</div>'
         '</div>'
         '<div style="margin-top:10px;">'
@@ -164,7 +150,6 @@ def render_store_card(store, shipments_df):
 
     st.markdown(card_html, unsafe_allow_html=True)
 
-    # Edit form in expander
     with st.expander("✏️ Edit **" + str(store['name']) + "**", expanded=False):
         with st.form("edit_" + str(store['id'])):
             c1, c2 = st.columns(2)
@@ -173,7 +158,6 @@ def render_store_card(store, shipments_df):
 
             c1, c2 = st.columns(2)
             current_launch = _to_date(launch_date_val)
-
             launch_date_edit = c1.date_input(
                 "🚀 Launch Date",
                 value=current_launch,
@@ -184,12 +168,6 @@ def render_store_card(store, shipments_df):
                 value=is_launched,
                 key="il_" + str(store['id']),
                 help="Tick if this store has already launched"
-            )
-
-            transportation_ready_edit = st.checkbox(
-                "🚚 Transportation Ready",
-                value=transport_ready,
-                key="tr_" + str(store['id'])
             )
 
             st.markdown("**📋 Required Quantities:**")
@@ -212,8 +190,8 @@ def render_store_card(store, shipments_df):
             if update_btn:
                 update_store(
                     store['id'], name, location, r30, r40, r60,
-                    launch_date_edit, transportation_ready_edit,
-                    is_launched_edit, rec30, rec40, rec60
+                    launch_date_edit, is_launched_edit,
+                    rec30, rec40, rec60
                 )
                 st.success("✅ Updated!")
                 st.rerun()
@@ -225,7 +203,6 @@ def render_store_card(store, shipments_df):
 
 
 def render_discrepancy_card(row, kind):
-    """Render a discrepancy card (excess or shortage)"""
     color = '#e67e22' if kind == 'excess' else '#e74c3c'
     icon = '📈' if kind == 'excess' else '📉'
 
@@ -273,7 +250,6 @@ def render_discrepancy_card(row, kind):
 
 
 def render_discrepancy_section(stores_df, shipments_df):
-    """Render the discrepancy section"""
     disc_df = get_discrepancies(stores_df, shipments_df)
 
     if disc_df.empty:
@@ -321,10 +297,8 @@ def render_discrepancy_section(stores_df, shipments_df):
 
 
 def render():
-    """Render the Stores page"""
     st.markdown("# 🏪 Stores Management")
 
-    # Add new store
     with st.expander("➕ **Add New Store**", expanded=False):
         with st.form("add_store", clear_on_submit=True):
             c1, c2 = st.columns(2)
@@ -332,17 +306,11 @@ def render():
             location = c2.text_input("Location")
 
             c1, c2 = st.columns(2)
-            launch_date_input = c1.date_input(
-                "🚀 Launch Date (optional)",
-                value=None
-            )
+            launch_date_input = c1.date_input("🚀 Launch Date (optional)", value=None)
             is_launched_new = c2.checkbox(
-                "✅ Already Launched",
-                value=False,
+                "✅ Already Launched", value=False,
                 help="Tick if this is an old store that has already launched"
             )
-
-            transportation_ready = st.checkbox("🚚 Transportation Ready", value=False)
 
             st.markdown("**📋 Required Quantities:**")
             c1, c2, c3 = st.columns(3)
@@ -360,8 +328,8 @@ def render():
             if submitted and name:
                 add_store(
                     name, location, r30, r40, r60,
-                    launch_date_input, transportation_ready,
-                    is_launched_new, rec30_new, rec40_new, rec60_new
+                    launch_date_input, is_launched_new,
+                    rec30_new, rec40_new, rec60_new
                 )
                 st.success("✅ Store '" + name + "' added!")
                 st.rerun()
@@ -373,10 +341,8 @@ def render():
         st.info("📭 No stores added yet.")
         return
 
-    # Discrepancy section
     render_discrepancy_section(stores_df, shipments_df)
 
-    # Stats
     render_section_title("📊 Stores Overview")
     total_stores = len(stores_df)
     launched = len(stores_df[stores_df['is_launched'] == True]) if 'is_launched' in stores_df.columns else 0
@@ -387,7 +353,6 @@ def render():
     c2.metric("✅ Launched", launched)
     c3.metric("🚀 Upcoming", upcoming)
 
-    # Filter
     render_section_title("📋 All Stores")
 
     col_filter1, col_filter2 = st.columns([1, 3])
@@ -409,7 +374,6 @@ def render():
         st.info("📭 No stores match the filter.")
         return
 
-    # Render stores 2 per row
     stores_list = list(filtered_df.iterrows())
 
     for i in range(0, len(stores_list), 2):
