@@ -61,7 +61,7 @@ def get_stocks():
 
 
 def get_stocks_dict():
-    """Get vendor stock as dictionary {type: quantity}"""
+    """Get vendor stock as dictionary"""
     df = get_stocks()
     if df.empty:
         return {}
@@ -90,7 +90,7 @@ def update_stock(divider_type, new_qty, note=''):
 
 
 def deduct_stock(divider_type, qty, note=''):
-    """Deduct quantity from stock (used in shipments)"""
+    """Deduct quantity from stock"""
     supabase = get_client()
     res = supabase.table('vendor_stock').select('*').eq('divider_type', divider_type).execute()
 
@@ -183,7 +183,7 @@ def delete_store(store_id):
 
 
 def get_upcoming_launches(days_ahead=4):
-    """Get stores with launch date within the specified days (NOT launched yet)"""
+    """Get stores with launch date within specified days (NOT launched yet)"""
     supabase = get_client()
     today = date.today()
     future = today + timedelta(days=days_ahead)
@@ -191,14 +191,13 @@ def get_upcoming_launches(days_ahead=4):
     if not res.data:
         return pd.DataFrame()
     df = pd.DataFrame(res.data)
-    
-    # Filter out already launched stores
+
     if 'is_launched' in df.columns:
         df = df[df['is_launched'] != True]
-    
+
     if df.empty:
         return pd.DataFrame()
-    
+
     df['launch_date'] = pd.to_datetime(df['launch_date']).dt.date
     df = df[(df['launch_date'] >= today) & (df['launch_date'] <= future)]
     df['days_left'] = df['launch_date'].apply(lambda d: (d - today).days)
@@ -206,32 +205,30 @@ def get_upcoming_launches(days_ahead=4):
 
 
 def get_discrepancies(stores_df, shipments_df):
-    """Calculate discrepancy between shipped and received quantities per store"""
+    """Calculate discrepancy between shipped and received quantities"""
     discrepancies = []
-    
+
     if stores_df.empty:
         return pd.DataFrame()
-    
+
     for _, store in stores_df.iterrows():
-        # Get shipments for this store
         store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else pd.DataFrame()
-        
+
         s30 = int(store_ships['qty_30d'].sum()) if not store_ships.empty else 0
         s40 = int(store_ships['qty_40d'].sum()) if not store_ships.empty else 0
         s60 = int(store_ships['qty_60d'].sum()) if not store_ships.empty else 0
-        
+
         r30 = int(store.get('received_30d', 0) or 0)
         r40 = int(store.get('received_40d', 0) or 0)
         r60 = int(store.get('received_60d', 0) or 0)
-        
-        # Only include if received > 0 OR there's a discrepancy
+
         if r30 == 0 and r40 == 0 and r60 == 0:
             continue
-        
+
         diff_30 = r30 - s30
         diff_40 = r40 - s40
         diff_60 = r60 - s60
-        
+
         if diff_30 != 0 or diff_40 != 0 or diff_60 != 0:
             discrepancies.append({
                 'store_id': store['id'],
@@ -247,7 +244,7 @@ def get_discrepancies(stores_df, shipments_df):
                 'received_60d': r60,
                 'diff_60d': diff_60,
             })
-    
+
     return pd.DataFrame(discrepancies)
 
 
@@ -299,31 +296,29 @@ def update_shipment_status(shipment_id, delivery_status):
 def delete_shipment(shipment_id):
     """Delete a shipment and return quantities to stock"""
     supabase = get_client()
-    
-    # Get shipment details before deleting
+
     res = supabase.table('shipments').select('*').eq('id', shipment_id).execute()
     if not res.data:
         return
-    
+
     shipment = res.data[0]
     q30 = int(shipment.get('qty_30d', 0) or 0)
     q40 = int(shipment.get('qty_40d', 0) or 0)
     q60 = int(shipment.get('qty_60d', 0) or 0)
     store_id = shipment.get('store_id')
-    
-    # Return quantities to stock
+
     for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
         if qty > 0:
             stock_res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
             if stock_res.data:
                 old_qty = stock_res.data[0]['quantity']
                 new_qty = old_qty + qty
-                
+
                 supabase.table('vendor_stock').update({
                     'quantity': new_qty,
                     'last_updated': datetime.utcnow().isoformat()
                 }).eq('divider_type', dtype).execute()
-                
+
                 supabase.table('stock_history').insert({
                     'divider_type': dtype,
                     'old_qty': old_qty,
@@ -331,14 +326,14 @@ def delete_shipment(shipment_id):
                     'change': qty,
                     'note': f'Returned from deleted shipment #{shipment_id} (store #{store_id})'
                 }).execute()
-    
-    # Now delete the shipment
+
     supabase.table('shipments').delete().eq('id', shipment_id).execute()
+
 
 # ==================== MAGNETS ====================
 
 def get_magnet_stock():
-    """Get magnet strips quantity at vendor"""
+    """Get magnet strips quantity"""
     supabase = get_client()
     res = supabase.table('magnet_stock').select('*').limit(1).execute()
     if res.data:
@@ -370,7 +365,7 @@ def update_magnet_stock(new_qty, note=''):
 
 
 def get_magnet_status():
-    """Get magnet status for all dividers as DataFrame"""
+    """Get magnet status for all dividers"""
     supabase = get_client()
     res = supabase.table('dividers_magnet_status').select('*').execute()
     if res.data:
@@ -457,3 +452,109 @@ def get_magnet_history(limit=20):
     if res.data:
         return pd.DataFrame(res.data)
     return pd.DataFrame()
+
+
+# ==================== ACTION ITEMS ====================
+
+def get_action_items():
+    """Get all action items with store info"""
+    supabase = get_client()
+    res = supabase.table('action_items').select('*, stores(name)').order('eta').execute()
+    if not res.data:
+        return pd.DataFrame()
+    df = pd.DataFrame(res.data)
+    df['store_name'] = df['stores'].apply(lambda x: x['name'] if x else None)
+    return df
+
+
+def add_action_item(action_text, owner, eta, status, store_id, priority, notes):
+    """Add a new action item"""
+    supabase = get_client()
+    data = {
+        'action_text': action_text,
+        'owner': owner,
+        'status': status,
+        'priority': priority,
+        'notes': notes,
+    }
+    if eta:
+        data['eta'] = eta.isoformat() if hasattr(eta, 'isoformat') else eta
+    if store_id:
+        data['store_id'] = store_id
+    supabase.table('action_items').insert(data).execute()
+
+
+def update_action_item(item_id, action_text, owner, eta, status, store_id, priority, notes):
+    """Update an action item"""
+    supabase = get_client()
+    data = {
+        'action_text': action_text,
+        'owner': owner,
+        'status': status,
+        'priority': priority,
+        'notes': notes,
+        'updated_at': datetime.utcnow().isoformat()
+    }
+    if eta:
+        data['eta'] = eta.isoformat() if hasattr(eta, 'isoformat') else eta
+    else:
+        data['eta'] = None
+    data['store_id'] = store_id if store_id else None
+    supabase.table('action_items').update(data).eq('id', item_id).execute()
+
+
+def delete_action_item(item_id):
+    """Delete an action item"""
+    supabase = get_client()
+    supabase.table('action_items').delete().eq('id', item_id).execute()
+
+
+def update_action_status(item_id, status):
+    """Quick update status"""
+    supabase = get_client()
+    supabase.table('action_items').update({
+        'status': status,
+        'updated_at': datetime.utcnow().isoformat()
+    }).eq('id', item_id).execute()
+
+
+# ==================== REPORT SETTINGS ====================
+
+def get_report_settings():
+    """Get report settings"""
+    supabase = get_client()
+    res = supabase.table('report_settings').select('*').limit(1).execute()
+    if res.data:
+        return res.data[0]
+    return {
+        'report_title': 'LAUNCH TEAM TRACKER - PROGRESS REPORT',
+        'executive_summary': '',
+        'highlights': '',
+        'lowlights': '',
+        'week_number': 1,
+        'next_update_date': None
+    }
+
+
+def update_report_settings(report_title, executive_summary, highlights, lowlights,
+                            week_number, next_update_date):
+    """Update report settings"""
+    supabase = get_client()
+    data = {
+        'report_title': report_title,
+        'executive_summary': executive_summary,
+        'highlights': highlights,
+        'lowlights': lowlights,
+        'week_number': week_number,
+        'updated_at': datetime.utcnow().isoformat()
+    }
+    if next_update_date:
+        data['next_update_date'] = next_update_date.isoformat() if hasattr(next_update_date, 'isoformat') else next_update_date
+    else:
+        data['next_update_date'] = None
+
+    res = supabase.table('report_settings').select('*').limit(1).execute()
+    if res.data:
+        supabase.table('report_settings').update(data).eq('id', res.data[0]['id']).execute()
+    else:
+        supabase.table('report_settings').insert(data).execute()
