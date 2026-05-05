@@ -39,39 +39,54 @@ def render_notifications_bell():
         counts = {'total': 0, 'critical': 0, 'warning': 0, 'info': 0}
 
     total = counts['total']
-    critical = counts.get('critical', 0)
 
-    # Determine button label + color
     if total == 0:
         bell_label = '🔔  Notifications'
-        active = st.session_state.get('show_notifications', False)
     else:
-        # Show count badge inside the button text
         bell_label = '🔔  Notifications  (' + str(total) + ')'
-        active = st.session_state.get('show_notifications', False)
 
-    # Button styling via session
+    active = st.session_state.get('show_notifications', False)
     button_type = 'primary' if active else 'secondary'
-
-    # Inject dynamic color hint for critical
-    if critical > 0:
-        st.markdown("""
-        <style>
-        [data-testid="stSidebar"] button[kind="primary"]:has(*[class*="Notifications"]),
-        [data-testid="stSidebar"] button:has(span:contains("Notifications"))[kind="secondary"] {
-            border: 2px solid #e74c3c !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
 
     if st.button(bell_label, use_container_width=True, key='btn_notifications',
                  type=button_type):
         st.session_state.show_notifications = True
-        st.session_state.section = None  # reset section to show notifications page
+        st.session_state.section = None
         st.rerun()
 
 
 # ==================== SIDEBAR ====================
+
+# Page labels (must match across app)
+DIVIDERS_PAGES = [
+    "📊  Dashboard",
+    "🏪  Stores",
+    "📦  Vendor Stock",
+    "🧲  Magnets",
+    "🚚  Shipments",
+    "📝  Action Items",
+    "📄  Progress Report",
+    "📈  Reports"
+]
+
+IT_PAGES = [
+    "📊  Dashboard",
+    "🏢  RDCs",
+    "💻  IT Stock",
+    "🚚  Shipments",
+    "📈  Reports"
+]
+
+
+def _find_page(pages, keyword):
+    """Find a page label that contains the keyword"""
+    if not keyword:
+        return pages[0]
+    for p in pages:
+        if keyword.lower() in p.lower():
+            return p
+    return pages[0]
+
 
 def render_sidebar():
     """Render sidebar with section switcher + navigation"""
@@ -79,6 +94,8 @@ def render_sidebar():
         st.session_state.section = None
     if 'show_notifications' not in st.session_state:
         st.session_state.show_notifications = False
+    if 'target_page' not in st.session_state:
+        st.session_state.target_page = None
 
     with st.sidebar:
         # Logo
@@ -106,10 +123,7 @@ def render_sidebar():
             """, unsafe_allow_html=True)
 
         st.markdown("---")
-
-        # NOTIFICATIONS BELL
         render_notifications_bell()
-
         st.markdown("---")
 
         # Section Switcher
@@ -129,6 +143,9 @@ def render_sidebar():
         ):
             st.session_state.section = 'dividers'
             st.session_state.show_notifications = False
+            # Clear target only if not coming from a Go To click
+            if not st.session_state.target_page:
+                pass
             st.rerun()
 
         st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
@@ -142,6 +159,8 @@ def render_sidebar():
         ):
             st.session_state.section = 'it'
             st.session_state.show_notifications = False
+            if not st.session_state.target_page:
+                pass
             st.rerun()
 
         # Navigation
@@ -156,44 +175,44 @@ def render_sidebar():
             """, unsafe_allow_html=True)
 
             if st.session_state.section == 'dividers':
-                page = st.radio(
-                    "Navigation",
-                    [
-                        "📊  Dashboard",
-                        "🏪  Stores",
-                        "📦  Vendor Stock",
-                        "🧲  Magnets",
-                        "🚚  Shipments",
-                        "📝  Action Items",
-                        "📄  Progress Report",
-                        "📈  Reports"
-                    ],
-                    label_visibility="collapsed",
-                    key="nav_dividers"
-                )
+                pages_list = DIVIDERS_PAGES
+                radio_key = "nav_dividers"
             else:
-                page = st.radio(
-                    "Navigation",
-                    [
-                        "📊  Dashboard",
-                        "🏢  RDCs",
-                        "💻  IT Stock",
-                        "🚚  Shipments",
-                        "📈  Reports"
-                    ],
-                    label_visibility="collapsed",
-                    key="nav_it"
-                )
+                pages_list = IT_PAGES
+                radio_key = "nav_it"
+
+            # If there's a target_page, pre-select it
+            default_index = 0
+            if st.session_state.target_page:
+                target_label = _find_page(pages_list, st.session_state.target_page)
+                try:
+                    default_index = pages_list.index(target_label)
+                except ValueError:
+                    default_index = 0
+
+                # IMPORTANT: delete the radio key from session_state before rendering
+                # so that the default_index takes effect
+                if radio_key in st.session_state:
+                    del st.session_state[radio_key]
+
+                # Clear target so next render doesn't force it
+                st.session_state.target_page = None
+
+            page = st.radio(
+                "Navigation",
+                pages_list,
+                index=default_index,
+                label_visibility="collapsed",
+                key=radio_key
+            )
 
         st.markdown("---")
 
-        # Dark mode toggle
         dark_label = "☀️ Switch to Light" if st.session_state.dark_mode else "🌙 Switch to Dark"
         if st.button(dark_label, use_container_width=True):
             st.session_state.dark_mode = not st.session_state.dark_mode
             st.rerun()
 
-        # Footer
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
         <div style="text-align:center; font-size:0.7rem; opacity:0.65; padding:10px;">
