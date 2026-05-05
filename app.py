@@ -1,10 +1,8 @@
 """
 Launch Team Tracker - Main Application
-Entry point for the Streamlit app
 """
 import streamlit as st
 
-# Page configuration (must be first Streamlit command)
 st.set_page_config(
     page_title="Launch Team Tracker",
     page_icon="📦",
@@ -12,25 +10,28 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state
 if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = False
 if 'section' not in st.session_state:
     st.session_state.section = None
+if 'show_notifications' not in st.session_state:
+    st.session_state.show_notifications = False
 
-# Load styles and components
 from styles import load_css, inject_arrow_killer
 from components import render_sidebar, get_logo_base64
 
-# Apply styles
 load_css()
 inject_arrow_killer()
 
-# Render sidebar and get the selected page
 page = render_sidebar()
 
-# Welcome screen if no section selected
-if st.session_state.section is None:
+# Notifications page takes priority
+if st.session_state.show_notifications:
+    from pages_app import notifications_page
+    notifications_page.render()
+
+# Welcome screen
+elif st.session_state.section is None:
     st.markdown("""
     <div style="text-align:center; padding:40px 20px 30px 20px;">
         <div style="font-size:3rem; margin-bottom:15px;">🚀</div>
@@ -60,7 +61,6 @@ if st.session_state.section is None:
             st.rerun()
 
 else:
-    # Route based on section
     section = st.session_state.section
 
     if section == 'dividers':
