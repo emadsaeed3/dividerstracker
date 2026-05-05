@@ -3,7 +3,7 @@ Stores management page
 """
 import streamlit as st
 import pandas as pd
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from database import (
     get_stores, add_store, update_store, delete_store,
     get_shipments, get_discrepancies
@@ -11,16 +11,35 @@ from database import (
 from components import render_section_title
 
 
+def _to_date(value):
+    """Convert any date-like value to a python date object"""
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except Exception:
+            try:
+                return pd.to_datetime(value).date()
+            except Exception:
+                return None
+    return None
+
+
 def get_launch_status(launch_date, is_launched=False):
     """Return status emoji and message based on launch date proximity"""
     if is_launched:
         return "✅", "Launched"
 
+    launch_date = _to_date(launch_date)
     if not launch_date:
         return "", ""
-
-    if isinstance(launch_date, str):
-        launch_date = date.fromisoformat(launch_date)
 
     today = date.today()
     days_left = (launch_date - today).days
@@ -58,15 +77,12 @@ def render_store_card(store, shipments_df):
     rec_60 = int(store.get('received_60d', 0) or 0)
 
     # Status badge color
+    launch_date_obj = _to_date(launch_date_val)
     if is_launched:
         status_color = '#27ae60'
         status_bg = 'rgba(39, 174, 96, 0.1)'
-    elif launch_date_val:
-        if isinstance(launch_date_val, str):
-            ld = date.fromisoformat(launch_date_val)
-        else:
-            ld = launch_date_val
-        days_left = (ld - date.today()).days
+    elif launch_date_obj:
+        days_left = (launch_date_obj - date.today()).days
         if days_left < 0:
             status_color = '#95a5a6'
             status_bg = 'rgba(149, 165, 166, 0.1)'
@@ -93,7 +109,7 @@ def render_store_card(store, shipments_df):
     status_text = status_msg if status_msg else "No Launch Date"
     status_badge = '<span style="background:' + status_color + '; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600;">' + emoji + ' ' + status_text + '</span>'
 
-    # Build quantity rows (using string concatenation to avoid HTML rendering issues)
+    # Build quantity rows
     def qty_row(label, required, shipped, received, color):
         pending = max(0, required - shipped)
         if pending > 0:
@@ -156,12 +172,7 @@ def render_store_card(store, shipments_df):
             location = c2.text_input("Location", value=store['location'] or '', key="l_" + str(store['id']))
 
             c1, c2 = st.columns(2)
-            current_launch = None
-            if launch_date_val:
-                if isinstance(launch_date_val, str):
-                    current_launch = date.fromisoformat(launch_date_val)
-                else:
-                    current_launch = launch_date_val
+            current_launch = _to_date(launch_date_val)
 
             launch_date_edit = c1.date_input(
                 "🚀 Launch Date",
@@ -262,7 +273,7 @@ def render_discrepancy_card(row, kind):
 
 
 def render_discrepancy_section(stores_df, shipments_df):
-    """Render the discrepancy section showing differences between shipped and received"""
+    """Render the discrepancy section"""
     disc_df = get_discrepancies(stores_df, shipments_df)
 
     if disc_df.empty:
@@ -277,7 +288,6 @@ def render_discrepancy_section(stores_df, shipments_df):
         )
         return
 
-    # Split into excess and shortage
     excess_stores = []
     shortage_stores = []
 
@@ -299,13 +309,11 @@ def render_discrepancy_section(stores_df, shipments_df):
         unsafe_allow_html=True
     )
 
-    # Excess section
     if excess_stores:
         st.markdown("### 📈 Excess — Received MORE than Shipped (" + str(len(excess_stores)) + ")")
         for row in excess_stores:
             render_discrepancy_card(row, 'excess')
 
-    # Shortage section
     if shortage_stores:
         st.markdown("### 📉 Shortage — Received LESS than Shipped (" + str(len(shortage_stores)) + ")")
         for row in shortage_stores:
