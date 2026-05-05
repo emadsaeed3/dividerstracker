@@ -10,7 +10,7 @@ from components import render_section_title
 
 
 def render_notification_card(notif, idx):
-    """Render a single notification card"""
+    """Render a single notification card with Go to button"""
     severity = notif['severity']
     cfg = SEVERITY_CONFIG[severity]
 
@@ -26,7 +26,7 @@ def render_notification_card(notif, idx):
         'border-left: 5px solid ' + cfg['color'] + ';'
         'border-radius: 14px;'
         'padding: 16px 20px;'
-        'margin-bottom: 12px;'
+        'margin-bottom: 8px;'
         'box-shadow: 0 4px 16px rgba(0,0,0,0.08);">'
 
         '<div style="display:flex; justify-content:space-between; align-items:flex-start; '
@@ -67,16 +67,16 @@ def render_notification_card(notif, idx):
     st.markdown(card_html, unsafe_allow_html=True)
 
     # Go to button
-    if goto_page:
-        c1, c2, c3 = st.columns([3, 1, 1])
+    if goto_page and section:
+        c1, c2, c3 = st.columns([4, 1, 1])
         with c3:
             if st.button('🔗 Go to', key='goto_' + str(idx), use_container_width=True):
-                # Switch to the correct section and page
                 st.session_state.section = section
-                # Note: Streamlit radio doesn't support direct page selection
-                # but the user can navigate easily after the section switches
-                st.success('Navigating to ' + goto_page + '...')
+                st.session_state.show_notifications = False
+                st.session_state.target_page = goto_page
                 st.rerun()
+
+    st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
 
 
 def render():
@@ -84,7 +84,6 @@ def render():
     st.markdown('# 🔔 Notifications')
     st.caption('All alerts and notifications from both sections')
 
-    # Get all notifications
     notifs = get_all_notifications()
 
     if not notifs:
@@ -97,7 +96,6 @@ def render():
         """, unsafe_allow_html=True)
         return
 
-    # Count by severity
     critical_count = sum(1 for n in notifs if n['severity'] == CRITICAL)
     warning_count = sum(1 for n in notifs if n['severity'] == WARNING)
     info_count = sum(1 for n in notifs if n['severity'] == INFO)
@@ -159,7 +157,6 @@ def render():
         key='notif_section'
     )
 
-    # Get unique categories
     categories = sorted(set(n.get('category', 'General') for n in notifs))
     category_filter = c3.selectbox(
         'Category',
@@ -167,7 +164,6 @@ def render():
         key='notif_category'
     )
 
-    # Apply filters
     filtered = notifs[:]
 
     if severity_filter == '🚨 Critical':
@@ -192,6 +188,5 @@ def render():
     st.markdown(f'**Showing {len(filtered)} of {len(notifs)} notifications**')
     st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
 
-    # Render all notifications
     for idx, notif in enumerate(filtered):
         render_notification_card(notif, idx)
