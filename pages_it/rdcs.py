@@ -1,11 +1,11 @@
 """
-RDCs management page (4M IT Equipment)
+RDCs management page (4M IT Equipment - no transportation field)
 """
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 from database_it import (
-    IT_EQUIPMENT_TYPES, IT_ICONS,
+    IT_EQUIPMENT_TYPES,
     get_rdcs, add_rdc, update_rdc, delete_rdc,
     get_rdc_requirements_dict, set_rdc_requirements_bulk,
     get_shipped_totals_per_rdc
@@ -13,31 +13,47 @@ from database_it import (
 from components import render_section_title
 
 
+def _to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except Exception:
+            try:
+                return pd.to_datetime(value).date()
+            except Exception:
+                return None
+    return None
+
+
 def get_launch_status(launch_date):
-    """Return status emoji and message based on launch date proximity"""
+    launch_date = _to_date(launch_date)
     if not launch_date:
         return "", ""
-
-    if isinstance(launch_date, str):
-        launch_date = date.fromisoformat(launch_date)
 
     today = date.today()
     days_left = (launch_date - today).days
 
     if days_left < 0:
-        return "✅", f"Launched {abs(days_left)} days ago"
+        return "✅", "Launched " + str(abs(days_left)) + " days ago"
     elif days_left == 0:
         return "🚀", "Launching TODAY!"
     elif days_left <= 2:
-        return "🚨", f"{days_left} day(s) left - URGENT!"
+        return "🚨", str(days_left) + "d left - URGENT!"
     elif days_left <= 4:
-        return "⚠️", f"{days_left} days left - Prepare shipment!"
+        return "⚠️", str(days_left) + "d left"
     else:
-        return "📅", f"{days_left} days left"
+        return "📅", str(days_left) + "d left"
 
 
 def render_rdc_summary(rdc_id, requirements):
-    """Render a visual summary of required vs shipped for an RDC"""
     shipped = get_shipped_totals_per_rdc(rdc_id)
 
     total_req = sum(requirements.values())
@@ -64,17 +80,12 @@ def render_rdc_summary(rdc_id, requirements):
 
 
 def render_rdc_card(rdc):
-    """Render an editable RDC card"""
     launch_date_val = rdc.get('launch_date')
     emoji, status_msg = get_launch_status(launch_date_val)
-
-    transport_ready = bool(rdc.get('transportation_ready', False))
-    transport_label = "✅ Transport Ready" if transport_ready else "❌ Transport Not Ready"
 
     title_parts = [f"🏢 **{rdc['name']}**", f"📍 {rdc['location'] or 'N/A'}"]
     if launch_date_val:
         title_parts.append(f"{emoji} {status_msg}")
-    title_parts.append(transport_label)
 
     with st.expander(" — ".join(title_parts)):
         requirements = get_rdc_requirements_dict(rdc['id'])
@@ -85,23 +96,11 @@ def render_rdc_card(rdc):
             name = c1.text_input("Name", value=rdc['name'], key=f"n_{rdc['id']}")
             location = c2.text_input("Location", value=rdc['location'] or '', key=f"l_{rdc['id']}")
 
-            c1, c2 = st.columns(2)
-            current_launch = None
-            if launch_date_val:
-                if isinstance(launch_date_val, str):
-                    current_launch = date.fromisoformat(launch_date_val)
-                else:
-                    current_launch = launch_date_val
-
-            launch_date_edit = c1.date_input(
+            current_launch = _to_date(launch_date_val)
+            launch_date_edit = st.date_input(
                 "🚀 Launch Date",
                 value=current_launch,
                 key=f"ld_{rdc['id']}"
-            )
-            transportation_ready_edit = c2.checkbox(
-                "🚚 Transport Ready",
-                value=transport_ready,
-                key=f"tr_{rdc['id']}"
             )
 
             st.markdown("**📋 Required Equipment:**")
@@ -120,10 +119,7 @@ def render_rdc_card(rdc):
             delete_btn = c2.form_submit_button("🗑️ Delete", use_container_width=True)
 
             if update_btn:
-                update_rdc(
-                    rdc['id'], name, location,
-                    launch_date_edit, transportation_ready_edit
-                )
+                update_rdc(rdc['id'], name, location, launch_date_edit)
                 set_rdc_requirements_bulk(rdc['id'], req_edit)
                 st.success("✅ Updated!")
                 st.rerun()
@@ -135,24 +131,16 @@ def render_rdc_card(rdc):
 
 
 def render():
-    """Render the RDCs page"""
     st.markdown("# 🏢 RDCs Management")
     st.caption("Regional Distribution Centers for 4M IT Equipment")
 
-    # Add new RDC
     with st.expander("➕ **Add New RDC**", expanded=False):
         with st.form("add_rdc", clear_on_submit=True):
             c1, c2 = st.columns(2)
             name = c1.text_input("RDC Name *")
             location = c2.text_input("Location")
 
-            c1, c2 = st.columns(2)
-            launch_date_input = c1.date_input(
-                "🚀 Launch Date (optional)",
-                value=None,
-                min_value=date.today()
-            )
-            transportation_ready = c2.checkbox("🚚 Transportation Ready", value=False)
+            launch_date_input = st.date_input("🚀 Launch Date (optional)", value=None)
 
             st.markdown("**📋 Required Equipment:**")
 
@@ -161,21 +149,18 @@ def render():
             for idx, item in enumerate(IT_EQUIPMENT_TYPES):
                 with cols[idx % 2]:
                     req_values[item] = st.number_input(
-                        f"{item}",
-                        min_value=0,
-                        value=0,
+                        f"{item}", min_value=0, value=0,
                         key=f"add_req_{item}"
                     )
 
             submitted = st.form_submit_button("➕ Add RDC", use_container_width=True)
             if submitted and name:
-                rdc_id = add_rdc(name, location, launch_date_input, transportation_ready)
+                rdc_id = add_rdc(name, location, launch_date_input)
                 if rdc_id:
                     set_rdc_requirements_bulk(rdc_id, req_values)
                     st.success(f"✅ RDC '{name}' added!")
                     st.rerun()
 
-    # List all RDCs (2 per row)
     render_section_title("📋 All RDCs")
     rdcs_df = get_rdcs()
 
@@ -187,10 +172,8 @@ def render():
 
     for i in range(0, len(rdcs_list), 2):
         c1, c2 = st.columns(2)
-
         with c1:
             render_rdc_card(rdcs_list[i][1])
-
         if i + 1 < len(rdcs_list):
             with c2:
                 render_rdc_card(rdcs_list[i + 1][1])
