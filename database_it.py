@@ -342,8 +342,41 @@ def update_it_shipment_status(shipment_id, delivery_status):
         'delivery_status': delivery_status
     }).eq('id', shipment_id).execute()
 
-
 def delete_it_shipment(shipment_id):
-    """Delete an IT shipment"""
+    """Delete an IT shipment and return quantities to stock"""
     supabase = get_client()
+    
+    # Get shipment items before deleting
+    items_res = supabase.table('it_shipment_items').select('*').eq('shipment_id', shipment_id).execute()
+    
+    # Get RDC id for logging
+    ship_res = supabase.table('it_shipments').select('rdc_id').eq('id', shipment_id).execute()
+    rdc_id = ship_res.data[0]['rdc_id'] if ship_res.data else None
+    
+    # Return each item to stock
+    if items_res.data:
+        for item in items_res.data:
+            equipment_type = item['equipment_type']
+            qty = int(item.get('quantity', 0) or 0)
+            
+            if qty > 0:
+                stock_res = supabase.table('it_equipment_stock').select('*').eq('equipment_type', equipment_type).execute()
+                if stock_res.data:
+                    old_qty = stock_res.data[0]['quantity']
+                    new_qty = old_qty + qty
+                    
+                    supabase.table('it_equipment_stock').update({
+                        'quantity': new_qty,
+                        'last_updated': datetime.utcnow().isoformat()
+                    }).eq('equipment_type', equipment_type).execute()
+                    
+                    supabase.table('it_stock_history').insert({
+                        'equipment_type': equipment_type,
+                        'old_qty': old_qty,
+                        'new_qty': new_qty,
+                        'change': qty,
+                        'note': f'Returned from deleted shipment #{shipment_id} (RDC #{rdc_id})'
+                    }).execute()
+    
+    # Now delete the shipment (cascade will delete items)
     supabase.table('it_shipments').delete().eq('id', shipment_id).execute()
