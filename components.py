@@ -28,12 +28,57 @@ def get_logo_base64(force_white=False):
     return None
 
 
+# ==================== NOTIFICATIONS BELL ====================
+
+def render_notifications_bell():
+    """Render a bell button with notification count"""
+    try:
+        from notifications import get_notifications_count
+        counts = get_notifications_count()
+    except Exception:
+        counts = {'total': 0, 'critical': 0, 'warning': 0, 'info': 0}
+
+    total = counts['total']
+    critical = counts.get('critical', 0)
+
+    # Determine button label + color
+    if total == 0:
+        bell_label = '🔔  Notifications'
+        active = st.session_state.get('show_notifications', False)
+    else:
+        # Show count badge inside the button text
+        bell_label = '🔔  Notifications  (' + str(total) + ')'
+        active = st.session_state.get('show_notifications', False)
+
+    # Button styling via session
+    button_type = 'primary' if active else 'secondary'
+
+    # Inject dynamic color hint for critical
+    if critical > 0:
+        st.markdown("""
+        <style>
+        [data-testid="stSidebar"] button[kind="primary"]:has(*[class*="Notifications"]),
+        [data-testid="stSidebar"] button:has(span:contains("Notifications"))[kind="secondary"] {
+            border: 2px solid #e74c3c !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+    if st.button(bell_label, use_container_width=True, key='btn_notifications',
+                 type=button_type):
+        st.session_state.show_notifications = True
+        st.session_state.section = None  # reset section to show notifications page
+        st.rerun()
+
+
 # ==================== SIDEBAR ====================
 
 def render_sidebar():
     """Render sidebar with section switcher + navigation"""
     if 'section' not in st.session_state:
         st.session_state.section = None
+    if 'show_notifications' not in st.session_state:
+        st.session_state.show_notifications = False
 
     with st.sidebar:
         # Logo
@@ -62,7 +107,12 @@ def render_sidebar():
 
         st.markdown("---")
 
-        # Section Switcher (stacked)
+        # NOTIFICATIONS BELL
+        render_notifications_bell()
+
+        st.markdown("---")
+
+        # Section Switcher
         st.markdown("""
         <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
                     letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
@@ -78,6 +128,7 @@ def render_sidebar():
             type="primary" if dividers_active else "secondary"
         ):
             st.session_state.section = 'dividers'
+            st.session_state.show_notifications = False
             st.rerun()
 
         st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
@@ -90,11 +141,12 @@ def render_sidebar():
             type="primary" if it_active else "secondary"
         ):
             st.session_state.section = 'it'
+            st.session_state.show_notifications = False
             st.rerun()
 
         # Navigation
         page = None
-        if st.session_state.section is not None:
+        if st.session_state.section is not None and not st.session_state.show_notifications:
             st.markdown("---")
             st.markdown("""
             <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
