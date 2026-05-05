@@ -2,11 +2,11 @@
 Shipments management page
 """
 import streamlit as st
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import pandas as pd
 from database import (
     get_stores, get_shipments, add_shipment,
-    delete_shipment, update_shipment_status
+    delete_shipment, update_shipment_status, update_shipment_transport
 )
 from components import render_section_title
 
@@ -21,12 +21,37 @@ STATUS_CONFIG = {
 }
 
 
+def _to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except Exception:
+            try:
+                return pd.to_datetime(value).date()
+            except Exception:
+                return None
+    return None
+
+
 def get_stores_with_pending_shipments(stores_df, shipments_df):
-    """Return stores with launch dates that still have pending quantities"""
     if stores_df.empty:
         return pd.DataFrame()
 
-    filtered = stores_df[stores_df['launch_date'].notna()].copy()
+    # Exclude launched stores
+    if 'is_launched' in stores_df.columns:
+        filtered = stores_df[stores_df['is_launched'] != True].copy()
+    else:
+        filtered = stores_df.copy()
+
+    filtered = filtered[filtered['launch_date'].notna()]
     if filtered.empty:
         return pd.DataFrame()
 
@@ -62,34 +87,23 @@ def get_stores_with_pending_shipments(stores_df, shipments_df):
                 'pending_30d': p30,
                 'pending_40d': p40,
                 'pending_60d': p60,
-                'transportation_ready': bool(store.get('transportation_ready', False)),
             })
 
     return pd.DataFrame(rows).sort_values('days_left') if rows else pd.DataFrame()
 
 
 def render_scheduled_card(row, idx):
-    """Render a scheduled shipment card"""
     days_left = row['days_left']
 
     if days_left <= 1:
         urgency_color = '#e74c3c'
         urgency_icon = '🚨'
-        urgency_label = 'URGENT'
     elif days_left <= 3:
         urgency_color = '#f39c12'
         urgency_icon = '⚠️'
-        urgency_label = 'SOON'
     else:
         urgency_color = '#3498db'
         urgency_icon = '📅'
-        urgency_label = 'UPCOMING'
-
-    transport_badge = (
-        '<span style="background:#27ae60; color:white; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:600;">✅ Transport Ready</span>'
-        if row['transportation_ready']
-        else '<span style="background:#e74c3c; color:white; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:600;">❌ Transport NOT Ready</span>'
-    )
 
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {urgency_color}15 100%);
@@ -100,12 +114,8 @@ def render_scheduled_card(row, idx):
                 box-shadow: 0 4px 16px rgba(0,0,0,0.08);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
             <div>
-                <div style="font-size:1.1rem; font-weight:700;">
-                    🏪 {row['name']}
-                </div>
-                <div style="font-size:0.85rem; opacity:0.7; margin-top:2px;">
-                    📍 {row['location']}
-                </div>
+                <div style="font-size:1.1rem; font-weight:700;">🏪 {row['name']}</div>
+                <div style="font-size:0.85rem; opacity:0.7; margin-top:2px;">📍 {row['location']}</div>
             </div>
             <div style="background:{urgency_color}; color:white; padding:5px 12px; border-radius:20px; font-weight:700; font-size:0.75rem;">
                 {urgency_icon} {row['days_left']}d left
@@ -114,7 +124,6 @@ def render_scheduled_card(row, idx):
         <div style="font-size:0.8rem; opacity:0.85; margin-bottom:8px;">
             🚀 Launch: <b>{row['launch_date']}</b> | 📆 Ship by: <b>{row['ship_by']}</b>
         </div>
-        <div style="margin-bottom:10px;">{transport_badge}</div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; padding-top:10px; border-top:1px dashed rgba(127,140,141,0.3);">
             <div style="background:rgba(52,152,219,0.15); padding:6px 10px; border-radius:8px; flex:1; min-width:80px;">
                 <span style="font-size:0.7rem; opacity:0.7;">🔵 30D</span>
@@ -138,22 +147,24 @@ def render_scheduled_card(row, idx):
             ship_date = c1.date_input("📅 Shipment Date", value=date.today(), key=f"sd_{row['id']}_{idx}")
             scheduled = c2.date_input("📆 Scheduled Delivery", value=row['ship_by'], key=f"scd_{row['id']}_{idx}")
 
+            c1, c2 = st.columns(2)
+            status = c1.selectbox("🚚 Status", DELIVERY_STATUSES, key=f"st_{row['id']}_{idx}")
+            transport_ready = c2.checkbox("🚛 Transportation Ready", value=False, key=f"tr_{row['id']}_{idx}")
+
             c1, c2, c3 = st.columns(3)
             q30 = c1.number_input("🔵 30D", min_value=0, value=int(row['pending_30d']), key=f"q30_{row['id']}_{idx}")
             q40 = c2.number_input("🟠 40D", min_value=0, value=int(row['pending_40d']), key=f"q40_{row['id']}_{idx}")
             q60 = c3.number_input("🟣 60D", min_value=0, value=int(row['pending_60d']), key=f"q60_{row['id']}_{idx}")
 
-            status = st.selectbox("🚚 Status", DELIVERY_STATUSES, key=f"st_{row['id']}_{idx}")
             notes = st.text_area("📝 Notes", key=f"nt_{row['id']}_{idx}")
 
             if st.form_submit_button("🚀 Create Shipment", use_container_width=True):
-                add_shipment(row['id'], ship_date, q30, q40, q60, notes, status, scheduled)
+                add_shipment(row['id'], ship_date, q30, q40, q60, notes, status, scheduled, transport_ready)
                 st.success(f"✅ Shipment created for {row['name']}!")
                 st.rerun()
 
 
 def render_shipment_card(ship, idx):
-    """Render a shipment card (half width)"""
     status = ship.get('delivery_status') or 'Pending'
     cfg = STATUS_CONFIG.get(status, STATUS_CONFIG['Pending'])
 
@@ -161,6 +172,12 @@ def render_shipment_card(ship, idx):
     scheduled = ship.get('scheduled_date')
     scheduled_str = str(scheduled) if scheduled else '—'
     notes = ship.get('notes') or '—'
+    transport_ready = bool(ship.get('transportation_ready', False))
+
+    if transport_ready:
+        transport_badge = '<span style="background:#27ae60; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600; margin-top:4px; display:inline-block;">🚛 Transport Ready</span>'
+    else:
+        transport_badge = '<span style="background:#e74c3c; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600; margin-top:4px; display:inline-block;">🚛 Transport Not Ready</span>'
 
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {cfg['bg']} 100%);
@@ -178,6 +195,7 @@ def render_shipment_card(ship, idx):
                 <div style="font-size:0.8rem; opacity:0.85; margin-top:4px;">
                     📅 {ship['date']} | 📆 {scheduled_str}
                 </div>
+                <div style="margin-top:4px;">{transport_badge}</div>
             </div>
             <div style="background:{cfg['color']}; color:white; padding:5px 12px; border-radius:20px; font-weight:700; font-size:0.75rem;">
                 {cfg['emoji']} {status}
@@ -207,7 +225,7 @@ def render_shipment_card(ship, idx):
     </div>
     """, unsafe_allow_html=True)
 
-    # Actions
+    # Actions row 1: Status + Update + Delete
     c1, c2, c3 = st.columns([2, 1, 1])
     new_status = c1.selectbox(
         "Update Status",
@@ -218,16 +236,22 @@ def render_shipment_card(ship, idx):
     )
     if c2.button("💾", key=f"upd_{ship['id']}_{idx}", use_container_width=True, help="Update Status"):
         update_shipment_status(ship['id'], new_status)
-        st.success(f"✅ Updated")
+        st.success("✅ Updated")
         st.rerun()
     if c3.button("🗑️", key=f"del_{ship['id']}_{idx}", use_container_width=True, help="Delete"):
         delete_shipment(ship['id'])
-        st.warning(f"🗑️ Deleted")
+        st.warning("🗑️ Deleted")
+        st.rerun()
+
+    # Actions row 2: Transport toggle
+    transport_label = "🚛 Mark Transport NOT Ready" if transport_ready else "🚛 Mark Transport READY"
+    if st.button(transport_label, key=f"transp_{ship['id']}_{idx}", use_container_width=True):
+        update_shipment_transport(ship['id'], not transport_ready)
+        st.success("✅ Transport status updated")
         st.rerun()
 
 
 def render():
-    """Render the Shipments page"""
     st.markdown("# 🚚 Shipments")
 
     stores_df = get_stores()
@@ -237,7 +261,7 @@ def render():
         st.warning("⚠️ Add a store first.")
         return
 
-    # SCHEDULED SHIPMENTS SECTION (2 per row)
+    # SCHEDULED SHIPMENTS
     scheduled_df = get_stores_with_pending_shipments(stores_df, shipments_df)
 
     if not scheduled_df.empty:
@@ -278,6 +302,8 @@ def render():
             )
             delivery_status = c2.selectbox("🚚 Delivery Status", DELIVERY_STATUSES)
 
+            transport_ready = st.checkbox("🚛 Transportation Ready", value=False)
+
             c1, c2, c3 = st.columns(3)
             q30 = c1.number_input("🔵 Qty 30D", min_value=0, value=0)
             q40 = c2.number_input("🟠 Qty 40D", min_value=0, value=0)
@@ -288,18 +314,17 @@ def render():
                 store_id = store_options[selected]
                 add_shipment(
                     store_id, ship_date, q30, q40, q60,
-                    notes, delivery_status, scheduled_date
+                    notes, delivery_status, scheduled_date, transport_ready
                 )
                 st.success("✅ Shipment recorded!")
                 st.rerun()
 
-    # ALL SHIPMENTS with Filter beside title
+    # ALL SHIPMENTS with Filter
     if shipments_df.empty:
         render_section_title("📋 All Shipments")
         st.info("📭 No shipments yet.")
         return
 
-    # Title + Filter on the same row
     col_title, col_filter = st.columns([2, 1])
     with col_title:
         render_section_title(f"📋 All Shipments ({len(shipments_df)})")
@@ -312,7 +337,6 @@ def render():
             label_visibility="collapsed"
         )
 
-    # Status stats
     pending = len(shipments_df[shipments_df['delivery_status'] == 'Pending']) if 'delivery_status' in shipments_df.columns else 0
     transit = len(shipments_df[shipments_df['delivery_status'] == 'In Transit']) if 'delivery_status' in shipments_df.columns else 0
     delivered = len(shipments_df[shipments_df['delivery_status'] == 'Delivered']) if 'delivery_status' in shipments_df.columns else 0
@@ -334,7 +358,6 @@ def render():
         st.info(f"📭 No shipments with status '{status_filter}'.")
         return
 
-    # Render 2 cards per row
     ships_list = list(filtered_df.iterrows())
     for i in range(0, len(ships_list), 2):
         c1, c2 = st.columns(2)
