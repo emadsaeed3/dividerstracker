@@ -177,8 +177,47 @@ def update_store(store_id, name, location, r30, r40, r60, launch_date=None, tran
 
 
 def delete_store(store_id):
-    """Delete a store"""
+    """Delete a store and all its related shipments and history"""
     supabase = get_client()
+
+    # Get all shipments for this store
+    ships_res = supabase.table('shipments').select('*').eq('store_id', store_id).execute()
+    
+    if ships_res.data:
+        for ship in ships_res.data:
+            ship_id = ship['id']
+            q30 = int(ship.get('qty_30d', 0) or 0)
+            q40 = int(ship.get('qty_40d', 0) or 0)
+            q60 = int(ship.get('qty_60d', 0) or 0)
+
+            # Return quantities to stock
+            for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
+                if qty > 0:
+                    stock_res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
+                    if stock_res.data:
+                        old_qty = stock_res.data[0]['quantity']
+                        new_qty = old_qty + qty
+
+                        supabase.table('vendor_stock').update({
+                            'quantity': new_qty,
+                            'last_updated': datetime.utcnow().isoformat()
+                        }).eq('divider_type', dtype).execute()
+
+            # Delete shipment (will cascade delete via Supabase if FK is set)
+            supabase.table('shipments').delete().eq('id', ship_id).execute()
+
+    # Clean up stock history related to this store's shipments
+    try:
+        hist_res = supabase.table('stock_history').select('*').execute()
+        if hist_res.data:
+            for entry in hist_res.data:
+                note = entry.get('note') or ''
+                if f'store #{store_id}' in note.lower():
+                    supabase.table('stock_history').delete().eq('id', entry['id']).execute()
+    except Exception:
+        pass
+
+    # Delete the store
     supabase.table('stores').delete().eq('id', store_id).execute()
 
 
@@ -292,9 +331,8 @@ def update_shipment_status(shipment_id, delivery_status):
         'delivery_status': delivery_status
     }).eq('id', shipment_id).execute()
 
-
 def delete_shipment(shipment_id):
-    """Delete a shipment and return quantities to stock"""
+    """Delete a shipment, return quantities to stock, and remove related history"""
     supabase = get_client()
 
     res = supabase.table('shipments').select('*').eq('id', shipment_id).execute()
@@ -307,6 +345,7 @@ def delete_shipment(shipment_id):
     q60 = int(shipment.get('qty_60d', 0) or 0)
     store_id = shipment.get('store_id')
 
+    # Return quantities to stock
     for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
         if qty > 0:
             stock_res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
@@ -319,14 +358,25 @@ def delete_shipment(shipment_id):
                     'last_updated': datetime.utcnow().isoformat()
                 }).eq('divider_type', dtype).execute()
 
-                supabase.table('stock_history').insert({
-                    'divider_type': dtype,
-                    'old_qty': old_qty,
-                    'new_qty': new_qty,
-                    'change': qty,
-                    'note': f'Returned from deleted shipment #{shipment_id} (store #{store_id})'
-                }).execute()
+    # Remove ALL stock_history entries that reference this shipment
+    try:
+        # Delete entries with the specific shipment note pattern
+        note_pattern_shipped = f'Shipped to store #{store_id}'
+        note_pattern_returned = f'Returned from deleted shipment #{shipment_id}'
+        
+        # Get all history entries that mention this shipment or store
+        hist_res = supabase.table('stock_history').select('*').execute()
+        if hist_res.data:
+            for entry in hist_res.data:
+                note = entry.get('note') or ''
+                # Match any note that references this shipment
+                if (f'shipment #{shipment_id}' in note.lower() or 
+                    f'Shipped to store #{store_id}' == note):
+                    supabase.table('stock_history').delete().eq('id', entry['id']).execute()
+    except Exception:
+        pass
 
+    # Finally delete the shipment
     supabase.table('shipments').delete().eq('id', shipment_id).execute()
 
 
