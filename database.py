@@ -11,14 +11,12 @@ import pandas as pd
 
 @st.cache_resource
 def init_supabase():
-    """Initialize Supabase client"""
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
 
 def get_client():
-    """Get Supabase client instance"""
     return init_supabase()
 
 
@@ -28,7 +26,6 @@ DEFAULT_THRESHOLD = 50
 
 
 def get_threshold():
-    """Get low stock threshold from settings"""
     try:
         supabase = get_client()
         res = supabase.table('settings').select('*').eq('key', 'low_stock_threshold').execute()
@@ -40,7 +37,6 @@ def get_threshold():
 
 
 def set_threshold(val):
-    """Update low stock threshold"""
     supabase = get_client()
     existing = supabase.table('settings').select('*').eq('key', 'low_stock_threshold').execute()
     if existing.data:
@@ -52,7 +48,6 @@ def set_threshold(val):
 # ==================== VENDOR STOCK ====================
 
 def get_stocks():
-    """Get all vendor stock as DataFrame"""
     supabase = get_client()
     res = supabase.table('vendor_stock').select('*').execute()
     if res.data:
@@ -61,7 +56,6 @@ def get_stocks():
 
 
 def get_stocks_dict():
-    """Get vendor stock as dictionary"""
     df = get_stocks()
     if df.empty:
         return {}
@@ -69,9 +63,7 @@ def get_stocks_dict():
 
 
 def update_stock(divider_type, new_qty, note=''):
-    """Update vendor stock quantity and log history"""
     supabase = get_client()
-
     res = supabase.table('vendor_stock').select('*').eq('divider_type', divider_type).execute()
     old_qty = res.data[0]['quantity'] if res.data else 0
 
@@ -90,7 +82,6 @@ def update_stock(divider_type, new_qty, note=''):
 
 
 def deduct_stock(divider_type, qty, note=''):
-    """Deduct quantity from stock"""
     supabase = get_client()
     res = supabase.table('vendor_stock').select('*').eq('divider_type', divider_type).execute()
 
@@ -113,7 +104,6 @@ def deduct_stock(divider_type, qty, note=''):
 
 
 def get_stock_history(limit=20):
-    """Get recent stock history"""
     supabase = get_client()
     res = supabase.table('stock_history').select('*').order('date', desc=True).limit(limit).execute()
     if res.data:
@@ -121,10 +111,16 @@ def get_stock_history(limit=20):
     return pd.DataFrame()
 
 
+def clear_stock_history():
+    """Clear all stock history entries"""
+    supabase = get_client()
+    # Supabase requires a filter; use a condition that matches all
+    supabase.table('stock_history').delete().neq('id', 0).execute()
+
+
 # ==================== STORES ====================
 
 def get_stores():
-    """Get all stores"""
     supabase = get_client()
     res = supabase.table('stores').select('*').order('name').execute()
     if res.data:
@@ -132,9 +128,8 @@ def get_stores():
     return pd.DataFrame()
 
 
-def add_store(name, location, r30, r40, r60, launch_date=None, transportation_ready=False,
+def add_store(name, location, r30, r40, r60, launch_date=None,
               is_launched=False, received_30d=0, received_40d=0, received_60d=0):
-    """Add a new store"""
     supabase = get_client()
     data = {
         'name': name,
@@ -142,7 +137,6 @@ def add_store(name, location, r30, r40, r60, launch_date=None, transportation_re
         'required_30d': r30,
         'required_40d': r40,
         'required_60d': r60,
-        'transportation_ready': transportation_ready,
         'is_launched': is_launched,
         'received_30d': received_30d,
         'received_40d': received_40d,
@@ -153,9 +147,8 @@ def add_store(name, location, r30, r40, r60, launch_date=None, transportation_re
     supabase.table('stores').insert(data).execute()
 
 
-def update_store(store_id, name, location, r30, r40, r60, launch_date=None, transportation_ready=False,
+def update_store(store_id, name, location, r30, r40, r60, launch_date=None,
                  is_launched=False, received_30d=0, received_40d=0, received_60d=0):
-    """Update an existing store"""
     supabase = get_client()
     data = {
         'name': name,
@@ -163,7 +156,6 @@ def update_store(store_id, name, location, r30, r40, r60, launch_date=None, tran
         'required_30d': r30,
         'required_40d': r40,
         'required_60d': r60,
-        'transportation_ready': transportation_ready,
         'is_launched': is_launched,
         'received_30d': received_30d,
         'received_40d': received_40d,
@@ -177,12 +169,9 @@ def update_store(store_id, name, location, r30, r40, r60, launch_date=None, tran
 
 
 def delete_store(store_id):
-    """Delete a store and all its related shipments and history"""
     supabase = get_client()
-
-    # Get all shipments for this store
     ships_res = supabase.table('shipments').select('*').eq('store_id', store_id).execute()
-    
+
     if ships_res.data:
         for ship in ships_res.data:
             ship_id = ship['id']
@@ -190,39 +179,33 @@ def delete_store(store_id):
             q40 = int(ship.get('qty_40d', 0) or 0)
             q60 = int(ship.get('qty_60d', 0) or 0)
 
-            # Return quantities to stock
             for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
                 if qty > 0:
                     stock_res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
                     if stock_res.data:
                         old_qty = stock_res.data[0]['quantity']
                         new_qty = old_qty + qty
-
                         supabase.table('vendor_stock').update({
                             'quantity': new_qty,
                             'last_updated': datetime.utcnow().isoformat()
                         }).eq('divider_type', dtype).execute()
 
-            # Delete shipment (will cascade delete via Supabase if FK is set)
             supabase.table('shipments').delete().eq('id', ship_id).execute()
 
-    # Clean up stock history related to this store's shipments
     try:
         hist_res = supabase.table('stock_history').select('*').execute()
         if hist_res.data:
             for entry in hist_res.data:
                 note = entry.get('note') or ''
-                if f'store #{store_id}' in note.lower():
+                if 'store #' + str(store_id) in note.lower():
                     supabase.table('stock_history').delete().eq('id', entry['id']).execute()
     except Exception:
         pass
 
-    # Delete the store
     supabase.table('stores').delete().eq('id', store_id).execute()
 
 
 def get_upcoming_launches(days_ahead=4):
-    """Get stores with launch date within specified days (NOT launched yet)"""
     supabase = get_client()
     today = date.today()
     future = today + timedelta(days=days_ahead)
@@ -244,7 +227,6 @@ def get_upcoming_launches(days_ahead=4):
 
 
 def get_discrepancies(stores_df, shipments_df):
-    """Calculate discrepancy between shipped and received quantities"""
     discrepancies = []
 
     if stores_df.empty:
@@ -290,7 +272,6 @@ def get_discrepancies(stores_df, shipments_df):
 # ==================== SHIPMENTS ====================
 
 def get_shipments():
-    """Get all shipments with store names"""
     supabase = get_client()
     res = supabase.table('shipments').select('*, stores(name)').order('date', desc=True).execute()
     if not res.data:
@@ -301,8 +282,8 @@ def get_shipments():
     return df
 
 
-def add_shipment(store_id, ship_date, q30, q40, q60, notes='', delivery_status='Pending', scheduled_date=None):
-    """Add a new shipment and deduct from stock"""
+def add_shipment(store_id, ship_date, q30, q40, q60, notes='',
+                  delivery_status='Pending', scheduled_date=None, transportation_ready=False):
     supabase = get_client()
 
     data = {
@@ -312,7 +293,8 @@ def add_shipment(store_id, ship_date, q30, q40, q60, notes='', delivery_status='
         'qty_40d': q40,
         'qty_60d': q60,
         'notes': notes,
-        'delivery_status': delivery_status
+        'delivery_status': delivery_status,
+        'transportation_ready': transportation_ready,
     }
     if scheduled_date:
         data['scheduled_date'] = scheduled_date.isoformat() if hasattr(scheduled_date, 'isoformat') else scheduled_date
@@ -321,18 +303,25 @@ def add_shipment(store_id, ship_date, q30, q40, q60, notes='', delivery_status='
 
     for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
         if qty > 0:
-            deduct_stock(dtype, qty, f'Shipped to store #{store_id}')
+            deduct_stock(dtype, qty, 'Shipped to store #' + str(store_id))
 
 
 def update_shipment_status(shipment_id, delivery_status):
-    """Update shipment delivery status"""
     supabase = get_client()
     supabase.table('shipments').update({
         'delivery_status': delivery_status
     }).eq('id', shipment_id).execute()
 
+
+def update_shipment_transport(shipment_id, transportation_ready):
+    """Update transportation ready status for a shipment"""
+    supabase = get_client()
+    supabase.table('shipments').update({
+        'transportation_ready': transportation_ready
+    }).eq('id', shipment_id).execute()
+
+
 def delete_shipment(shipment_id):
-    """Delete a shipment, return quantities to stock, and remove related history"""
     supabase = get_client()
 
     res = supabase.table('shipments').select('*').eq('id', shipment_id).execute()
@@ -345,45 +334,34 @@ def delete_shipment(shipment_id):
     q60 = int(shipment.get('qty_60d', 0) or 0)
     store_id = shipment.get('store_id')
 
-    # Return quantities to stock
     for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
         if qty > 0:
             stock_res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
             if stock_res.data:
                 old_qty = stock_res.data[0]['quantity']
                 new_qty = old_qty + qty
-
                 supabase.table('vendor_stock').update({
                     'quantity': new_qty,
                     'last_updated': datetime.utcnow().isoformat()
                 }).eq('divider_type', dtype).execute()
 
-    # Remove ALL stock_history entries that reference this shipment
     try:
-        # Delete entries with the specific shipment note pattern
-        note_pattern_shipped = f'Shipped to store #{store_id}'
-        note_pattern_returned = f'Returned from deleted shipment #{shipment_id}'
-        
-        # Get all history entries that mention this shipment or store
         hist_res = supabase.table('stock_history').select('*').execute()
         if hist_res.data:
             for entry in hist_res.data:
                 note = entry.get('note') or ''
-                # Match any note that references this shipment
-                if (f'shipment #{shipment_id}' in note.lower() or 
-                    f'Shipped to store #{store_id}' == note):
+                if ('shipment #' + str(shipment_id) in note.lower() or
+                    'Shipped to store #' + str(store_id) == note):
                     supabase.table('stock_history').delete().eq('id', entry['id']).execute()
     except Exception:
         pass
 
-    # Finally delete the shipment
     supabase.table('shipments').delete().eq('id', shipment_id).execute()
 
 
 # ==================== MAGNETS ====================
 
 def get_magnet_stock():
-    """Get magnet strips quantity"""
     supabase = get_client()
     res = supabase.table('magnet_stock').select('*').limit(1).execute()
     if res.data:
@@ -392,7 +370,6 @@ def get_magnet_stock():
 
 
 def update_magnet_stock(new_qty, note=''):
-    """Update magnet strips quantity"""
     supabase = get_client()
     res = supabase.table('magnet_stock').select('*').limit(1).execute()
 
@@ -415,7 +392,6 @@ def update_magnet_stock(new_qty, note=''):
 
 
 def get_magnet_status():
-    """Get magnet status for all dividers"""
     supabase = get_client()
     res = supabase.table('dividers_magnet_status').select('*').execute()
     if res.data:
@@ -424,7 +400,6 @@ def get_magnet_status():
 
 
 def get_magnet_status_dict():
-    """Get magnet status as dict"""
     df = get_magnet_status()
     if df.empty:
         return {}
@@ -438,17 +413,16 @@ def get_magnet_status_dict():
 
 
 def apply_magnet_to_dividers(divider_type, qty, note=''):
-    """Apply magnet to dividers"""
     supabase = get_client()
     strips_needed = qty
 
     current_strips = get_magnet_stock()
     if current_strips < strips_needed:
-        return False, f"Not enough strips! Need {strips_needed}, have {current_strips}"
+        return False, 'Not enough strips! Need ' + str(strips_needed) + ', have ' + str(current_strips)
 
     res = supabase.table('dividers_magnet_status').select('*').eq('divider_type', divider_type).execute()
     if not res.data:
-        return False, "Divider type not found"
+        return False, 'Divider type not found'
 
     current = res.data[0]
     new_with = current['with_magnet'] + qty
@@ -476,11 +450,10 @@ def apply_magnet_to_dividers(divider_type, qty, note=''):
         'note': note
     }).execute()
 
-    return True, f"✅ Applied magnet to {qty} {divider_type} dividers"
+    return True, '✅ Applied magnet to ' + str(qty) + ' ' + divider_type + ' dividers'
 
 
 def set_dividers_without_magnet(divider_type, qty):
-    """Set the quantity of dividers without magnet"""
     supabase = get_client()
     supabase.table('dividers_magnet_status').update({
         'without_magnet': qty,
@@ -496,7 +469,6 @@ def set_dividers_without_magnet(divider_type, qty):
 
 
 def get_magnet_history(limit=20):
-    """Get recent magnet history"""
     supabase = get_client()
     res = supabase.table('magnet_history').select('*').order('date', desc=True).limit(limit).execute()
     if res.data:
@@ -507,7 +479,6 @@ def get_magnet_history(limit=20):
 # ==================== ACTION ITEMS ====================
 
 def get_action_items():
-    """Get all action items with store info"""
     supabase = get_client()
     res = supabase.table('action_items').select('*, stores(name)').order('eta').execute()
     if not res.data:
@@ -518,7 +489,6 @@ def get_action_items():
 
 
 def add_action_item(action_text, owner, eta, status, store_id, priority, notes):
-    """Add a new action item"""
     supabase = get_client()
     data = {
         'action_text': action_text,
@@ -535,7 +505,6 @@ def add_action_item(action_text, owner, eta, status, store_id, priority, notes):
 
 
 def update_action_item(item_id, action_text, owner, eta, status, store_id, priority, notes):
-    """Update an action item"""
     supabase = get_client()
     data = {
         'action_text': action_text,
@@ -554,13 +523,11 @@ def update_action_item(item_id, action_text, owner, eta, status, store_id, prior
 
 
 def delete_action_item(item_id):
-    """Delete an action item"""
     supabase = get_client()
     supabase.table('action_items').delete().eq('id', item_id).execute()
 
 
 def update_action_status(item_id, status):
-    """Quick update status"""
     supabase = get_client()
     supabase.table('action_items').update({
         'status': status,
@@ -571,7 +538,6 @@ def update_action_status(item_id, status):
 # ==================== REPORT SETTINGS ====================
 
 def get_report_settings():
-    """Get report settings"""
     supabase = get_client()
     res = supabase.table('report_settings').select('*').limit(1).execute()
     if res.data:
@@ -588,7 +554,6 @@ def get_report_settings():
 
 def update_report_settings(report_title, executive_summary, highlights, lowlights,
                             week_number, next_update_date):
-    """Update report settings"""
     supabase = get_client()
     data = {
         'report_title': report_title,
