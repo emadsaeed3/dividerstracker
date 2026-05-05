@@ -18,7 +18,6 @@ def auto_suggest_highlights(stores_df, shipments_df):
     """Auto-generate highlight suggestions"""
     suggestions = []
     today = date.today()
-    week_ago = today - timedelta(days=7)
 
     # Recently launched stores
     if not stores_df.empty and 'is_launched' in stores_df.columns:
@@ -138,16 +137,62 @@ def render():
     with c5:
         render_stat_card('Open Actions', open_actions, 'card-60d', 'bi-list-task')
 
-    # === REPORT SETTINGS FORM ===
+    # === AUTO-SUGGEST BUTTONS (outside forms) ===
     render_section_title('⚙️ Report Settings')
 
     st.markdown('''
     <div style="background: rgba(52, 152, 219, 0.1); padding: 12px 18px; border-radius: 10px; 
                 border-left: 4px solid #3498db; margin-bottom: 16px; font-size:0.9rem;">
-        💡 Configure the content of your report below. Changes are saved before generating the PDF.
+        💡 Configure the content of your report below. Use auto-suggest to add insights automatically from your data.
     </div>
     ''', unsafe_allow_html=True)
 
+    # Auto-suggest buttons (outside form)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button('💡 Auto-Suggest Highlights', use_container_width=True, key='btn_suggest_h'):
+            suggestions = auto_suggest_highlights(stores_df, shipments_df)
+            if suggestions:
+                current_highlights = settings.get('highlights') or ''
+                new_highlights = current_highlights + ('\n' if current_highlights else '') + suggestions
+                update_report_settings(
+                    settings.get('report_title') or 'LAUNCH TEAM TRACKER - PROGRESS REPORT',
+                    settings.get('executive_summary') or '',
+                    new_highlights,
+                    settings.get('lowlights') or '',
+                    int(settings.get('week_number') or 1),
+                    settings.get('next_update_date')
+                )
+                st.success('✅ Highlights suggested and saved!')
+                st.rerun()
+            else:
+                st.info('💡 No highlights to suggest right now.')
+
+    with c2:
+        if st.button('💡 Auto-Suggest Lowlights', use_container_width=True, key='btn_suggest_l'):
+            suggestions = auto_suggest_lowlights(
+                stocks, threshold, stores_df, shipments_df,
+                magnet_stock, magnet_status
+            )
+            if suggestions:
+                current_lowlights = settings.get('lowlights') or ''
+                new_lowlights = current_lowlights + ('\n' if current_lowlights else '') + suggestions
+                update_report_settings(
+                    settings.get('report_title') or 'LAUNCH TEAM TRACKER - PROGRESS REPORT',
+                    settings.get('executive_summary') or '',
+                    settings.get('highlights') or '',
+                    new_lowlights,
+                    int(settings.get('week_number') or 1),
+                    settings.get('next_update_date')
+                )
+                st.success('✅ Lowlights suggested and saved!')
+                st.rerun()
+            else:
+                st.info('💡 No issues detected right now.')
+
+    st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+
+    # === MAIN SETTINGS FORM ===
     with st.form('report_settings_form'):
         c1, c2 = st.columns(2)
 
@@ -182,38 +227,25 @@ def render():
             placeholder='Describe the overall progress...'
         )
 
-        # Highlights
         st.markdown('**✅ Highlights** (one point per line)')
-        col_h1, col_h2 = st.columns([3, 1])
-        with col_h1:
-            highlights = st.text_area(
-                'Highlights',
-                value=settings.get('highlights') or '',
-                height=120,
-                placeholder='• Store A launched successfully\n• All 3P shipments on track',
-                label_visibility='collapsed'
-            )
-        with col_h2:
-            st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
-            suggest_h = st.form_submit_button('💡 Auto-Suggest', use_container_width=True)
+        highlights = st.text_area(
+            'Highlights',
+            value=settings.get('highlights') or '',
+            height=120,
+            placeholder='• Store A launched successfully\n• All shipments on track',
+            label_visibility='collapsed'
+        )
 
-        # Lowlights
         st.markdown('**⚠️ Lowlights** (one point per line)')
-        col_l1, col_l2 = st.columns([3, 1])
-        with col_l1:
-            lowlights = st.text_area(
-                'Lowlights',
-                value=settings.get('lowlights') or '',
-                height=120,
-                placeholder='• 30D stock shortage\n• Store X transport not ready',
-                label_visibility='collapsed'
-            )
-        with col_l2:
-            st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
-            suggest_l = st.form_submit_button('💡 Auto-Suggest', use_container_width=True)
+        lowlights = st.text_area(
+            'Lowlights',
+            value=settings.get('lowlights') or '',
+            height=120,
+            placeholder='• 30D stock shortage\n• Store X transport not ready',
+            label_visibility='collapsed'
+        )
 
-        c1, c2 = st.columns([1, 1])
-        save_btn = c1.form_submit_button('💾 Save Settings', use_container_width=True)
+        save_btn = st.form_submit_button('💾 Save Settings', use_container_width=True, type='primary')
 
         if save_btn:
             update_report_settings(
@@ -222,35 +254,6 @@ def render():
             )
             st.success('✅ Settings saved!')
             st.rerun()
-
-        if suggest_h:
-            suggestions = auto_suggest_highlights(stores_df, shipments_df)
-            if suggestions:
-                new_highlights = highlights + ('\n' if highlights else '') + suggestions
-                update_report_settings(
-                    report_title, executive_summary, new_highlights, lowlights,
-                    week_number, next_update_date
-                )
-                st.success('✅ Highlights suggested and saved!')
-                st.rerun()
-            else:
-                st.info('💡 No highlights to suggest right now.')
-
-        if suggest_l:
-            suggestions = auto_suggest_lowlights(
-                stocks, threshold, stores_df, shipments_df,
-                magnet_stock, magnet_status
-            )
-            if suggestions:
-                new_lowlights = lowlights + ('\n' if lowlights else '') + suggestions
-                update_report_settings(
-                    report_title, executive_summary, highlights, new_lowlights,
-                    week_number, next_update_date
-                )
-                st.success('✅ Lowlights suggested and saved!')
-                st.rerun()
-            else:
-                st.info('💡 No issues detected right now.')
 
     # === GENERATE PDF ===
     render_section_title('📥 Generate Report')
@@ -309,23 +312,13 @@ def render():
         
         4. **Lowlights** — Dark box with bullet points of issues/challenges
         
-        5. **Portfolio KPIs** — 5 key metric cards:
-           - Total Stores, Launched, Upcoming, Pending Shipments, Open Actions
+        5. **Portfolio KPIs** — 5 key metric cards
         
-        6. **Store Status Summary** — Full table with:
-           - Store name, Location, Launch Date, Progress %, Status (color-coded), 
-             Transport readiness, Pending quantity
+        6. **Store Status Summary** — Full table with color-coded statuses
         
-        7. **Dividers Summary** — Table showing stock vs requirements per divider type (30D/40D/60D)
+        7. **Dividers Summary** — Stock vs Requirements per type
         
-        8. **Magnet Status** — Table with with/without magnet counts per type
+        8. **Magnet Status** — With/Without magnet counts
         
-        9. **Action Items** — Table with all tasks, owners, ETAs, and statuses
-        
-        ### 🎨 Styling:
-        - Professional dark header
-        - Color-coded status badges
-        - Alternating row colors
-        - Clean typography
-        - Page numbering
+        9. **Action Items** — All tasks with statuses
         ''')
