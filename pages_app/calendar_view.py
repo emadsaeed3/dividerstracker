@@ -10,11 +10,11 @@ from components import render_section_title
 
 
 EVENT_COLORS = {
-    'launch': '#e74c3c',       # Red - Launch dates
-    'shipment': '#3498db',     # Blue - Shipments
-    'scheduled': '#9b59b6',    # Purple - Scheduled shipments
-    'action': '#f39c12',       # Orange - Action items
-    'launched': '#27ae60',     # Green - Already launched
+    'launch': '#e74c3c',
+    'shipment': '#3498db',
+    'scheduled': '#9b59b6',
+    'action': '#f39c12',
+    'launched': '#27ae60',
 }
 
 EVENT_ICONS = {
@@ -26,18 +26,35 @@ EVENT_ICONS = {
 }
 
 
+def _to_date(value):
+    """Convert any date-like value to a python date object"""
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except Exception:
+            try:
+                return pd.to_datetime(value).date()
+            except Exception:
+                return None
+    return None
+
+
 def collect_events(stores_df, shipments_df, action_items_df):
     """Collect all events grouped by date"""
-    events = {}  # {date: [list of events]}
+    events = {}
 
     def add_event(event_date, event_type, title, subtitle='', item_id=None):
+        event_date = _to_date(event_date)
         if not event_date:
             return
-        if isinstance(event_date, str):
-            try:
-                event_date = date.fromisoformat(event_date)
-            except Exception:
-                return
         if event_date not in events:
             events[event_date] = []
         events[event_date].append({
@@ -51,7 +68,7 @@ def collect_events(stores_df, shipments_df, action_items_df):
     if not stores_df.empty and 'launch_date' in stores_df.columns:
         for _, store in stores_df.iterrows():
             ld = store.get('launch_date')
-            if ld:
+            if ld is not None and pd.notna(ld):
                 is_launched = bool(store.get('is_launched', False))
                 event_type = 'launched' if is_launched else 'launch'
                 add_event(
@@ -65,10 +82,9 @@ def collect_events(stores_df, shipments_df, action_items_df):
     # Shipment dates
     if not shipments_df.empty:
         for _, ship in shipments_df.iterrows():
-            # Shipped date
             ship_date = ship.get('date')
-            if ship_date:
-                total = int(ship.get('qty_30d', 0)) + int(ship.get('qty_40d', 0)) + int(ship.get('qty_60d', 0))
+            if ship_date is not None and pd.notna(ship_date):
+                total = int(ship.get('qty_30d', 0) or 0) + int(ship.get('qty_40d', 0) or 0) + int(ship.get('qty_60d', 0) or 0)
                 store_name = str(ship.get('store_name', 'Unknown'))
                 add_event(
                     ship_date,
@@ -78,17 +94,19 @@ def collect_events(stores_df, shipments_df, action_items_df):
                     ship['id']
                 )
 
-            # Scheduled date (if different from ship date)
             sched = ship.get('scheduled_date')
-            if sched and sched != ship_date:
-                store_name = str(ship.get('store_name', 'Unknown'))
-                add_event(
-                    sched,
-                    'scheduled',
-                    '📆 Scheduled: ' + store_name,
-                    'Shipment #' + str(ship['id']),
-                    ship['id']
-                )
+            if sched is not None and pd.notna(sched):
+                sched_d = _to_date(sched)
+                ship_d = _to_date(ship_date)
+                if sched_d and sched_d != ship_d:
+                    store_name = str(ship.get('store_name', 'Unknown'))
+                    add_event(
+                        sched,
+                        'scheduled',
+                        '📆 Scheduled: ' + store_name,
+                        'Shipment #' + str(ship['id']),
+                        ship['id']
+                    )
 
     # Action Items ETAs
     if not action_items_df.empty and 'eta' in action_items_df.columns:
@@ -96,7 +114,7 @@ def collect_events(stores_df, shipments_df, action_items_df):
             if item.get('status') == 'Completed':
                 continue
             eta = item.get('eta')
-            if eta:
+            if eta is not None and pd.notna(eta):
                 action_text = str(item.get('action_text', ''))[:40]
                 owner = str(item.get('owner') or '—')
                 add_event(
@@ -112,15 +130,13 @@ def collect_events(stores_df, shipments_df, action_items_df):
 
 def render_month_calendar(year, month, events):
     """Render a monthly calendar as a table"""
-    cal = calendar.Calendar(firstweekday=6)  # Sunday first
+    cal = calendar.Calendar(firstweekday=6)
     weeks = cal.monthdatescalendar(year, month)
     today = date.today()
 
-    # Build HTML table
     html = '<div style="overflow-x:auto;">'
     html += '<table style="width:100%; border-collapse:separate; border-spacing:4px; font-family:inherit;">'
 
-    # Header row (days)
     html += '<tr>'
     for day_name in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']:
         html += (
@@ -130,7 +146,6 @@ def render_month_calendar(year, month, events):
         )
     html += '</tr>'
 
-    # Calendar rows
     for week in weeks:
         html += '<tr>'
         for day in week:
@@ -138,7 +153,6 @@ def render_month_calendar(year, month, events):
             is_today = day == today
             day_events = events.get(day, [])
 
-            # Cell styling
             if not is_current_month:
                 cell_bg = 'rgba(127,140,141,0.05)'
                 cell_opacity = '0.4'
@@ -158,7 +172,6 @@ def render_month_calendar(year, month, events):
                 + border_style + '">'
             )
 
-            # Day number
             day_color = '#3498db' if is_today else 'inherit'
             html += (
                 '<div style="font-weight:700; font-size:0.95rem; '
@@ -166,14 +179,12 @@ def render_month_calendar(year, month, events):
                 + str(day.day) + '</div>'
             )
 
-            # Events (max 3 visible, rest as "+N more")
             max_visible = 3
             visible = day_events[:max_visible]
             remaining = len(day_events) - max_visible
 
             for ev in visible:
                 color = EVENT_COLORS.get(ev['type'], '#7f8c8d')
-                # Shorten title
                 title = ev['title']
                 if len(title) > 18:
                     title = title[:17] + '…'
@@ -201,6 +212,10 @@ def render_month_calendar(year, month, events):
 
 def render_day_details(events, selected_date):
     """Render details of events for a selected date"""
+    selected_date = _to_date(selected_date)
+    if not selected_date:
+        return
+
     day_events = events.get(selected_date, [])
 
     if not day_events:
@@ -233,12 +248,10 @@ def render():
     st.markdown('# 📅 Calendar View')
     st.caption('See all launches, shipments, and action items on a calendar')
 
-    # Load data
     stores_df = get_stores()
     shipments_df = get_shipments()
     action_items_df = get_action_items()
 
-    # Collect events
     events = collect_events(stores_df, shipments_df, action_items_df)
 
     # Legend
@@ -296,7 +309,6 @@ def render():
 
     st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 
-    # Render calendar
     render_month_calendar(
         st.session_state.calendar_year,
         st.session_state.calendar_month,
@@ -320,11 +332,18 @@ def render():
     st.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
     render_section_title('📊 This Month Summary')
 
-    month_events = [
-        ev for d, evs in events.items()
-        if d.year == st.session_state.calendar_year and d.month == st.session_state.calendar_month
-        for ev in evs
-    ]
+    # Filter events by current displayed month (all event keys are python date objects now)
+    current_year = st.session_state.calendar_year
+    current_month = st.session_state.calendar_month
+
+    month_events = []
+    for d, evs in events.items():
+        try:
+            if d.year == current_year and d.month == current_month:
+                month_events.extend(evs)
+        except AttributeError:
+            # Skip invalid date keys
+            continue
 
     launches = sum(1 for ev in month_events if ev['type'] == 'launch')
     launched = sum(1 for ev in month_events if ev['type'] == 'launched')
