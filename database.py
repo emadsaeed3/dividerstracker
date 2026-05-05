@@ -297,10 +297,43 @@ def update_shipment_status(shipment_id, delivery_status):
 
 
 def delete_shipment(shipment_id):
-    """Delete a shipment"""
+    """Delete a shipment and return quantities to stock"""
     supabase = get_client()
+    
+    # Get shipment details before deleting
+    res = supabase.table('shipments').select('*').eq('id', shipment_id).execute()
+    if not res.data:
+        return
+    
+    shipment = res.data[0]
+    q30 = int(shipment.get('qty_30d', 0) or 0)
+    q40 = int(shipment.get('qty_40d', 0) or 0)
+    q60 = int(shipment.get('qty_60d', 0) or 0)
+    store_id = shipment.get('store_id')
+    
+    # Return quantities to stock
+    for dtype, qty in [('30D', q30), ('40D', q40), ('60D', q60)]:
+        if qty > 0:
+            stock_res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
+            if stock_res.data:
+                old_qty = stock_res.data[0]['quantity']
+                new_qty = old_qty + qty
+                
+                supabase.table('vendor_stock').update({
+                    'quantity': new_qty,
+                    'last_updated': datetime.utcnow().isoformat()
+                }).eq('divider_type', dtype).execute()
+                
+                supabase.table('stock_history').insert({
+                    'divider_type': dtype,
+                    'old_qty': old_qty,
+                    'new_qty': new_qty,
+                    'change': qty,
+                    'note': f'Returned from deleted shipment #{shipment_id} (store #{store_id})'
+                }).execute()
+    
+    # Now delete the shipment
     supabase.table('shipments').delete().eq('id', shipment_id).execute()
-
 
 # ==================== MAGNETS ====================
 
