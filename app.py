@@ -18,19 +18,14 @@ if 'show_notifications' not in st.session_state:
     st.session_state.show_notifications = False
 if 'show_calendar' not in st.session_state:
     st.session_state.show_calendar = False
-if 'quick_add_mode' not in st.session_state:
-    st.session_state.quick_add_mode = None
 
 from styles import load_css, inject_arrow_killer
-from components import render_sidebar, handle_quick_add_dialogs
+from components import render_sidebar
 
 load_css()
 inject_arrow_killer()
 
 page = render_sidebar()
-
-# Quick add dialogs (if triggered)
-handle_quick_add_dialogs()
 
 # Notifications page
 if st.session_state.show_notifications:
