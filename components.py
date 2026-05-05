@@ -32,9 +32,8 @@ def get_logo_base64(force_white=False):
 
 def render_sidebar():
     """Render sidebar with section switcher + navigation"""
-    # Initialize session state
     if 'section' not in st.session_state:
-        st.session_state.section = None  # None = no section chosen yet
+        st.session_state.section = None
 
     with st.sidebar:
         # Logo
@@ -63,7 +62,7 @@ def render_sidebar():
 
         st.markdown("---")
 
-        # Section Switcher (Stacked - one above the other)
+        # Section Switcher (stacked)
         st.markdown("""
         <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
                     letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
@@ -93,7 +92,7 @@ def render_sidebar():
             st.session_state.section = 'it'
             st.rerun()
 
-        # Navigation only shows AFTER a section is selected
+        # Navigation
         page = None
         if st.session_state.section is not None:
             st.markdown("---")
@@ -113,6 +112,8 @@ def render_sidebar():
                         "📦  Vendor Stock",
                         "🧲  Magnets",
                         "🚚  Shipments",
+                        "📝  Action Items",
+                        "📄  Progress Report",
                         "📈  Reports"
                     ],
                     label_visibility="collapsed",
