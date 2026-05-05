@@ -51,13 +51,62 @@ def render_notifications_bell():
     if st.button(bell_label, use_container_width=True, key='btn_notifications',
                  type=button_type):
         st.session_state.show_notifications = True
+        st.session_state.show_calendar = False
         st.session_state.section = None
+        st.rerun()
+
+
+# ==================== CALENDAR LINK ====================
+
+def render_calendar_link():
+    """Render a calendar link button"""
+    active = st.session_state.get('show_calendar', False)
+    button_type = 'primary' if active else 'secondary'
+
+    if st.button('📅  Calendar', use_container_width=True, key='btn_calendar',
+                 type=button_type):
+        st.session_state.show_calendar = True
+        st.session_state.show_notifications = False
+        st.session_state.section = None
+        st.rerun()
+
+
+# ==================== QUICK ADD ====================
+
+def render_quick_add_section():
+    """Render Quick Add buttons"""
+    st.markdown("""
+    <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
+                letter-spacing:1.2px; font-weight:700; margin-bottom:8px;">
+        ⚡ Quick Add
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button('🚚 + Shipment', use_container_width=True, key='qa_shipment'):
+        st.session_state.quick_add_mode = 'shipment'
+        st.session_state.show_notifications = False
+        st.session_state.show_calendar = False
+        st.rerun()
+
+    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+
+    if st.button('📝 + Action Item', use_container_width=True, key='qa_action'):
+        st.session_state.quick_add_mode = 'action'
+        st.session_state.show_notifications = False
+        st.session_state.show_calendar = False
+        st.rerun()
+
+    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+
+    if st.button('🏪 + Store', use_container_width=True, key='qa_store'):
+        st.session_state.quick_add_mode = 'store'
+        st.session_state.show_notifications = False
+        st.session_state.show_calendar = False
         st.rerun()
 
 
 # ==================== SIDEBAR ====================
 
-# Page labels (must match across app)
 DIVIDERS_PAGES = [
     "📊  Dashboard",
     "🏪  Stores",
@@ -94,8 +143,12 @@ def render_sidebar():
         st.session_state.section = None
     if 'show_notifications' not in st.session_state:
         st.session_state.show_notifications = False
+    if 'show_calendar' not in st.session_state:
+        st.session_state.show_calendar = False
     if 'target_page' not in st.session_state:
         st.session_state.target_page = None
+    if 'quick_add_mode' not in st.session_state:
+        st.session_state.quick_add_mode = None
 
     with st.sidebar:
         # Logo
@@ -123,7 +176,17 @@ def render_sidebar():
             """, unsafe_allow_html=True)
 
         st.markdown("---")
+
+        # TOP UTILITIES
         render_notifications_bell()
+        st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+        render_calendar_link()
+
+        st.markdown("---")
+
+        # QUICK ADD
+        render_quick_add_section()
+
         st.markdown("---")
 
         # Section Switcher
@@ -143,9 +206,7 @@ def render_sidebar():
         ):
             st.session_state.section = 'dividers'
             st.session_state.show_notifications = False
-            # Clear target only if not coming from a Go To click
-            if not st.session_state.target_page:
-                pass
+            st.session_state.show_calendar = False
             st.rerun()
 
         st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
@@ -159,13 +220,18 @@ def render_sidebar():
         ):
             st.session_state.section = 'it'
             st.session_state.show_notifications = False
-            if not st.session_state.target_page:
-                pass
+            st.session_state.show_calendar = False
             st.rerun()
 
         # Navigation
         page = None
-        if st.session_state.section is not None and not st.session_state.show_notifications:
+        show_nav = (
+            st.session_state.section is not None
+            and not st.session_state.show_notifications
+            and not st.session_state.show_calendar
+        )
+
+        if show_nav:
             st.markdown("---")
             st.markdown("""
             <div style="font-size:0.7rem; opacity:0.75; text-transform:uppercase; 
@@ -181,7 +247,6 @@ def render_sidebar():
                 pages_list = IT_PAGES
                 radio_key = "nav_it"
 
-            # If there's a target_page, pre-select it
             default_index = 0
             if st.session_state.target_page:
                 target_label = _find_page(pages_list, st.session_state.target_page)
@@ -190,12 +255,9 @@ def render_sidebar():
                 except ValueError:
                     default_index = 0
 
-                # IMPORTANT: delete the radio key from session_state before rendering
-                # so that the default_index takes effect
                 if radio_key in st.session_state:
                     del st.session_state[radio_key]
 
-                # Clear target so next render doesn't force it
                 st.session_state.target_page = None
 
             page = st.radio(
@@ -222,6 +284,156 @@ def render_sidebar():
         """, unsafe_allow_html=True)
 
         return page
+
+
+# ==================== QUICK ADD DIALOGS ====================
+
+@st.dialog('🚚 Quick Add Shipment')
+def quick_add_shipment_dialog():
+    """Quick add shipment dialog"""
+    from database import get_stores, add_shipment
+    from datetime import date, timedelta
+
+    stores_df = get_stores()
+    if stores_df.empty:
+        st.warning('⚠️ Add a store first!')
+        if st.button('Close'):
+            st.session_state.quick_add_mode = None
+            st.rerun()
+        return
+
+    with st.form('qa_ship_form', clear_on_submit=True):
+        store_options = {
+            row['name'] + ' (' + str(row.get('location') or 'N/A') + ')': row['id']
+            for _, row in stores_df.iterrows()
+        }
+
+        selected = st.selectbox('🏪 Store', list(store_options.keys()))
+
+        c1, c2 = st.columns(2)
+        ship_date = c1.date_input('📅 Shipment Date', value=date.today())
+        scheduled = c2.date_input('📆 Scheduled Delivery', value=date.today() + timedelta(days=1))
+
+        status = st.selectbox('🚚 Status', ['Pending', 'In Transit', 'Delivered', 'Delayed'])
+
+        c1, c2, c3 = st.columns(3)
+        q30 = c1.number_input('🔵 30D', min_value=0, value=0)
+        q40 = c2.number_input('🟠 40D', min_value=0, value=0)
+        q60 = c3.number_input('🟣 60D', min_value=0, value=0)
+
+        notes = st.text_area('📝 Notes', height=60)
+
+        c1, c2 = st.columns(2)
+        submit = c1.form_submit_button('💾 Save', use_container_width=True, type='primary')
+        cancel = c2.form_submit_button('❌ Cancel', use_container_width=True)
+
+        if submit:
+            store_id = store_options[selected]
+            add_shipment(store_id, ship_date, q30, q40, q60, notes, status, scheduled)
+            st.success('✅ Shipment added!')
+            st.session_state.quick_add_mode = None
+            st.rerun()
+
+        if cancel:
+            st.session_state.quick_add_mode = None
+            st.rerun()
+
+
+@st.dialog('📝 Quick Add Action Item')
+def quick_add_action_dialog():
+    """Quick add action item dialog"""
+    from database import add_action_item, get_stores
+    from datetime import date, timedelta
+
+    stores_df = get_stores()
+    store_options = {'(None)': None}
+    if not stores_df.empty:
+        for _, store in stores_df.iterrows():
+            store_options[store['name']] = store['id']
+
+    with st.form('qa_action_form', clear_on_submit=True):
+        action_text = st.text_area('Action *', placeholder='Describe the action...')
+
+        c1, c2 = st.columns(2)
+        owner = c1.text_input('Owner *', placeholder='e.g. John Doe')
+        eta = c2.date_input('ETA', value=date.today() + timedelta(days=7))
+
+        c1, c2, c3 = st.columns(3)
+        status = c1.selectbox('Status', ['Pending', 'In Progress', 'Completed', 'Blocked'])
+        priority = c2.selectbox('Priority', ['High', 'Medium', 'Low'], index=1)
+        store_key = c3.selectbox('Store', list(store_options.keys()))
+        store_id = store_options[store_key]
+
+        notes = st.text_area('Notes', height=60)
+
+        c1, c2 = st.columns(2)
+        submit = c1.form_submit_button('💾 Save', use_container_width=True, type='primary')
+        cancel = c2.form_submit_button('❌ Cancel', use_container_width=True)
+
+        if submit:
+            if action_text and owner:
+                add_action_item(action_text, owner, eta, status, store_id, priority, notes)
+                st.success('✅ Action item added!')
+                st.session_state.quick_add_mode = None
+                st.rerun()
+            else:
+                st.error('❌ Please fill in Action and Owner')
+
+        if cancel:
+            st.session_state.quick_add_mode = None
+            st.rerun()
+
+
+@st.dialog('🏪 Quick Add Store')
+def quick_add_store_dialog():
+    """Quick add store dialog"""
+    from database import add_store
+    from datetime import date
+
+    with st.form('qa_store_form', clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        name = c1.text_input('Store Name *')
+        location = c2.text_input('Location')
+
+        c1, c2 = st.columns(2)
+        launch_date_input = c1.date_input('🚀 Launch Date', value=None)
+        is_launched = c2.checkbox('✅ Already Launched', value=False)
+
+        transportation_ready = st.checkbox('🚚 Transportation Ready', value=False)
+
+        c1, c2, c3 = st.columns(3)
+        r30 = c1.number_input('🔵 Required 30D', min_value=0, value=0)
+        r40 = c2.number_input('🟠 Required 40D', min_value=0, value=0)
+        r60 = c3.number_input('🟣 Required 60D', min_value=0, value=0)
+
+        c1, c2 = st.columns(2)
+        submit = c1.form_submit_button('💾 Save', use_container_width=True, type='primary')
+        cancel = c2.form_submit_button('❌ Cancel', use_container_width=True)
+
+        if submit and name:
+            add_store(
+                name, location, r30, r40, r60,
+                launch_date_input, transportation_ready,
+                is_launched, 0, 0, 0
+            )
+            st.success('✅ Store added!')
+            st.session_state.quick_add_mode = None
+            st.rerun()
+
+        if cancel:
+            st.session_state.quick_add_mode = None
+            st.rerun()
+
+
+def handle_quick_add_dialogs():
+    """Check if a quick add dialog should open"""
+    mode = st.session_state.get('quick_add_mode')
+    if mode == 'shipment':
+        quick_add_shipment_dialog()
+    elif mode == 'action':
+        quick_add_action_dialog()
+    elif mode == 'store':
+        quick_add_store_dialog()
 
 
 # ==================== CARDS ====================
