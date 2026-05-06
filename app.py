@@ -73,7 +73,7 @@ else:
     if section == 'dividers':
         from pages_app import (
             dashboard, stores, vendor_stock, magnets,
-            shipments, action_items, progress_report, reports
+            shipments, action_items, progress_report
         )
 
         if page is None or "Dashboard" in page:
@@ -88,10 +88,8 @@ else:
             shipments.render()
         elif "Action Items" in page:
             action_items.render()
-        elif "Progress Report" in page:
+        elif "Reports" in page or "Progress Report" in page:
             progress_report.render()
-        elif "Reports" in page:
-            reports.render()
 
     elif section == 'it':
         from pages_it import dashboard_it, rdcs, it_stock, it_shipments, it_reports
