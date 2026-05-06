@@ -573,3 +573,216 @@ def update_report_settings(report_title, executive_summary, highlights, lowlight
         supabase.table('report_settings').update(data).eq('id', res.data[0]['id']).execute()
     else:
         supabase.table('report_settings').insert(data).execute()
+
+# ==================== PURCHASE ORDERS ====================
+
+def get_purchase_orders(status_filter=None):
+    """Get all POs, optionally filtered by status"""
+    try:
+        query = supabase.table('purchase_orders').select('*').order('po_date', desc=True)
+        if status_filter:
+            if isinstance(status_filter, list):
+                query = query.in_('status', status_filter)
+            else:
+                query = query.eq('status', status_filter)
+        result = query.execute()
+        return pd.DataFrame(result.data) if result.data else pd.DataFrame()
+    except Exception as e:
+        print(f"Error fetching POs: {e}")
+        return pd.DataFrame()
+
+
+def get_po_by_id(po_id):
+    """Get single PO by ID"""
+    try:
+        result = supabase.table('purchase_orders').select('*').eq('id', po_id).execute()
+        if result.data:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"Error fetching PO: {e}")
+        return None
+
+
+def add_purchase_order(po_number, vendor_name, po_date, expected_date,
+                       qty_30d, qty_40d, qty_60d, status='Draft', notes=''):
+    """Add new PO"""
+    try:
+        data = {
+            'po_number': po_number,
+            'vendor_name': vendor_name or '',
+            'po_date': po_date.isoformat() if hasattr(po_date, 'isoformat') else po_date,
+            'expected_date': expected_date.isoformat() if expected_date and hasattr(expected_date, 'isoformat') else expected_date,
+            'qty_30d': int(qty_30d or 0),
+            'qty_40d': int(qty_40d or 0),
+            'qty_60d': int(qty_60d or 0),
+            'status': status,
+            'notes': notes or ''
+        }
+        result = supabase.table('purchase_orders').insert(data).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        print(f"Error adding PO: {e}")
+        return None
+
+
+def update_purchase_order(po_id, po_number, vendor_name, po_date, expected_date,
+                          qty_30d, qty_40d, qty_60d, status, notes):
+    """Update PO (only if not Received/Cancelled)"""
+    try:
+        current = get_po_by_id(po_id)
+        if not current:
+            return False
+        
+        # Lock if already received
+        if current.get('status') == 'Received':
+            return False
+        
+        data = {
+            'po_number': po_number,
+            'vendor_name': vendor_name or '',
+            'po_date': po_date.isoformat() if hasattr(po_date, 'isoformat') else po_date,
+            'expected_date': expected_date.isoformat() if expected_date and hasattr(expected_date, 'isoformat') else expected_date,
+            'qty_30d': int(qty_30d or 0),
+            'qty_40d': int(qty_40d or 0),
+            'qty_60d': int(qty_60d or 0),
+            'status': status,
+            'notes': notes or '',
+            'updated_at': datetime.now().isoformat()
+        }
+        supabase.table('purchase_orders').update(data).eq('id', po_id).execute()
+        return True
+    except Exception as e:
+        print(f"Error updating PO: {e}")
+        return False
+
+
+def receive_purchase_order(po_id):
+    """Mark PO as Received and add quantities to stock"""
+    try:
+        po = get_po_by_id(po_id)
+        if not po:
+            return False, "PO not found"
+        
+        if po.get('status') == 'Received':
+            return False, "PO already received"
+        
+        if po.get('status') == 'Cancelled':
+            return False, "Cannot receive cancelled PO"
+        
+        # Update stock for each divider type
+        po_number = po.get('po_number', '')
+        for dtype, col in [('30D', 'qty_30d'), ('40D', 'qty_40d'), ('60D', 'qty_60d')]:
+            qty = int(po.get(col, 0) or 0)
+            if qty > 0:
+                # Add to vendor stock
+                current_stock = get_stock(dtype)
+                new_stock = current_stock + qty
+                
+                # Update stock
+                supabase.table('vendor_stock').update({
+                    'quantity': new_stock,
+                    'updated_at': datetime.now().isoformat()
+                }).eq('divider_type', dtype).execute()
+                
+                # Log movement
+                supabase.table('stock_movements').insert({
+                    'divider_type': dtype,
+                    'movement_type': 'IN',
+                    'quantity': qty,
+                    'notes': f'PO Received #{po_number}',
+                    'movement_date': date.today().isoformat()
+                }).execute()
+        
+        # Update PO status
+        supabase.table('purchase_orders').update({
+            'status': 'Received',
+            'received_date': date.today().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', po_id).execute()
+        
+        return True, "PO received and stock updated"
+    except Exception as e:
+        print(f"Error receiving PO: {e}")
+        return False, str(e)
+
+
+def delete_purchase_order(po_id):
+    """Delete PO (only if not Received)"""
+    try:
+        po = get_po_by_id(po_id)
+        if not po:
+            return False
+        if po.get('status') == 'Received':
+            return False
+        supabase.table('purchase_orders').delete().eq('id', po_id).execute()
+        return True
+    except Exception as e:
+        print(f"Error deleting PO: {e}")
+        return False
+
+
+def get_pending_pos():
+    """Get POs that are not yet received or cancelled"""
+    try:
+        active_statuses = ['Draft', 'Sent to Vendor', 'Confirmed', 'In Production', 'Shipped']
+        result = supabase.table('purchase_orders').select('*').in_('status', active_statuses).order('expected_date').execute()
+        return pd.DataFrame(result.data) if result.data else pd.DataFrame()
+    except Exception as e:
+        print(f"Error fetching pending POs: {e}")
+        return pd.DataFrame()
+
+
+def get_po_alerts():
+    """Get alerts for POs (overdue or stuck in status)"""
+    alerts = []
+    try:
+        pending = get_pending_pos()
+        if pending.empty:
+            return alerts
+        
+        today = date.today()
+        
+        for _, po in pending.iterrows():
+            po_num = po.get('po_number', 'N/A')
+            status = po.get('status', '')
+            
+            # Alert 1: Expected date passed/near
+            expected = po.get('expected_date')
+            if expected:
+                try:
+                    if isinstance(expected, str):
+                        exp_date = date.fromisoformat(expected[:10])
+                    else:
+                        exp_date = expected
+                    days_left = (exp_date - today).days
+                    
+                    if days_left < 0:
+                        alerts.append(('danger', f'📋 **PO #{po_num}** is **{abs(days_left)}d overdue** (expected: {exp_date.strftime("%d %b")}) — Status: {status}'))
+                    elif days_left <= 2:
+                        alerts.append(('warning', f'📋 **PO #{po_num}** expected in **{days_left}d** — Status: {status}'))
+                except Exception:
+                    pass
+            
+            # Alert 2: Stuck in status > 7 days
+            try:
+                po_date_val = po.get('po_date')
+                if po_date_val:
+                    if isinstance(po_date_val, str):
+                        pd_date = date.fromisoformat(po_date_val[:10])
+                    else:
+                        pd_date = po_date_val
+                    days_old = (today - pd_date).days
+                    
+                    if days_old > 7 and status in ('Draft', 'Sent to Vendor'):
+                        alerts.append(('warning', f'📋 **PO #{po_num}** stuck in "{status}" for **{days_old}d** — follow up with vendor!'))
+            except Exception:
+                pass
+        
+        return alerts
+    except Exception as e:
+        print(f"Error generating PO alerts: {e}")
+        return alerts
+
+
+PO_STATUSES = ['Draft', 'Sent to Vendor', 'Confirmed', 'In Production', 'Shipped', 'Received', 'Cancell
