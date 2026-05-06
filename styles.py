@@ -686,6 +686,117 @@ def load_css():
     .stMarkdown strong, .stMarkdown b {{
         color: {c['text_primary']} !important;
     }}
+    /* ============ DARK MODE - FORCE FIX ============ */
+    
+    /* Secondary buttons (Auto-Generate, etc) */
+    .stButton > button[kind="secondary"],
+    button[kind="secondary"] {{
+        background: {c['bg_secondary']} !important;
+        color: {c['text_primary']} !important;
+        border: 1.5px solid {c['input_border']} !important;
+        box-shadow: none !important;
+    }}
+    .stButton > button[kind="secondary"]:hover,
+    button[kind="secondary"]:hover {{
+        background: {c['bg_tertiary']} !important;
+        border-color: #3498db !important;
+        color: {c['text_primary']} !important;
+        transform: translateY(-2px);
+    }}
+    
+    /* All text inputs - FORCE DARK */
+    div[data-baseweb="input"] {{
+        background: {c['input_bg']} !important;
+    }}
+    div[data-baseweb="input"] input {{
+        background: {c['input_bg']} !important;
+        color: {c['text_primary']} !important;
+        -webkit-text-fill-color: {c['text_primary']} !important;
+    }}
+    
+    /* All text areas - FORCE DARK */
+    div[data-baseweb="textarea"] {{
+        background: {c['input_bg']} !important;
+    }}
+    div[data-baseweb="textarea"] textarea {{
+        background: {c['input_bg']} !important;
+        color: {c['text_primary']} !important;
+        -webkit-text-fill-color: {c['text_primary']} !important;
+    }}
+    
+    /* Number input wrapper */
+    .stNumberInput > div {{
+        background: {c['input_bg']} !important;
+    }}
+    .stNumberInput > div > div {{
+        background: {c['input_bg']} !important;
+    }}
+    .stNumberInput input {{
+        background: {c['input_bg']} !important;
+        color: {c['text_primary']} !important;
+        -webkit-text-fill-color: {c['text_primary']} !important;
+    }}
+    
+    /* Number input +/- buttons */
+    .stNumberInput button {{
+        background: {c['bg_tertiary']} !important;
+        color: {c['text_primary']} !important;
+        border-color: {c['input_border']} !important;
+    }}
+    .stNumberInput button:hover {{
+        background: {c['border_color']} !important;
+    }}
+    .stNumberInput button div {{
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Date input */
+    .stDateInput > div {{
+        background: {c['input_bg']} !important;
+    }}
+    .stDateInput > div > div {{
+        background: {c['input_bg']} !important;
+    }}
+    .stDateInput input {{
+        background: {c['input_bg']} !important;
+        color: {c['text_primary']} !important;
+        -webkit-text-fill-color: {c['text_primary']} !important;
+    }}
+    
+    /* Calendar popup */
+    div[data-baseweb="popover"] [data-baseweb="calendar"],
+    div[data-baseweb="calendar"] {{
+        background: {c['bg_secondary']} !important;
+    }}
+    div[data-baseweb="calendar"] * {{
+        color: {c['text_primary']} !important;
+    }}
+    div[data-baseweb="calendar"] button {{
+        background: transparent !important;
+        color: {c['text_primary']} !important;
+    }}
+    div[data-baseweb="calendar"] button:hover {{
+        background: {c['bg_tertiary']} !important;
+    }}
+    div[data-baseweb="calendar"] button[aria-selected="true"] {{
+        background: #3498db !important;
+        color: white !important;
+    }}
+    
+    /* Selectbox dropdown options */
+    ul[role="listbox"],
+    div[data-baseweb="popover"] ul {{
+        background: {c['bg_secondary']} !important;
+        border: 1px solid {c['border_color']} !important;
+    }}
+    li[role="option"] {{
+        background: {c['bg_secondary']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    li[role="option"]:hover {{
+        background: {c['bg_tertiary']} !important;
+        color: {c['text_primary']} !important;
+    }}
     </style>
     
     <script>
