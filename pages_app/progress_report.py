@@ -1,7 +1,10 @@
 """
-Progress Report page - Unified PDF + Email Generation
+Progress Report page - Unified PDF + Email + Detailed Report Generation
 """
 import streamlit as st
+import pandas as pd
+import openpyxl
+from io import BytesIO
 from datetime import date, datetime, timedelta
 from database import (
     get_report_settings, update_report_settings,
@@ -20,7 +23,6 @@ def auto_suggest_highlights(stores_df, shipments_df, action_items_df):
     """Generate highlights from current data (REPLACES existing)"""
     suggestions = []
 
-    # Launched stores
     if not stores_df.empty and 'is_launched' in stores_df.columns:
         launched = stores_df[stores_df['is_launched'] == True]
         if len(launched) > 0:
@@ -30,7 +32,6 @@ def auto_suggest_highlights(stores_df, shipments_df, action_items_df):
                 loc = store.get('location') or 'N/A'
                 suggestions.append(f"{name} ({loc}) is live")
 
-    # Delivered shipments
     if not shipments_df.empty and 'delivery_status' in shipments_df.columns:
         delivered = shipments_df[shipments_df['delivery_status'] == 'Delivered']
         if not delivered.empty:
@@ -38,13 +39,11 @@ def auto_suggest_highlights(stores_df, shipments_df, action_items_df):
             total_units = int(delivered['qty_30d'].sum()) + int(delivered['qty_40d'].sum()) + int(delivered['qty_60d'].sum())
             suggestions.append(f"{total_delivered} shipment(s) delivered successfully ({total_units} total units)")
 
-    # Completed actions
     if action_items_df is not None and not action_items_df.empty and 'status' in action_items_df.columns:
         completed = action_items_df[action_items_df['status'] == 'Completed']
         if not completed.empty:
             suggestions.append(f"{len(completed)} action item(s) completed this period")
 
-    # Stock health
     stocks = get_stocks_dict()
     threshold = get_threshold()
     healthy_types = []
@@ -63,7 +62,6 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
     suggestions = []
     today = date.today()
 
-    # Stock shortages
     for dtype in ['30D', '40D', '60D']:
         stock = stocks.get(dtype, 0)
         col = f'required_{dtype.lower()}'
@@ -80,7 +78,6 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
         elif 0 < stock < threshold:
             suggestions.append(f"{dtype} stock running low ({stock} units left, threshold: {threshold})")
 
-    # Magnet shortage
     total_without_magnet = sum(
         magnet_status.get(t, {}).get('without_magnet', 0)
         for t in ['30D', '40D', '60D']
@@ -89,7 +86,6 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
         shortage = total_without_magnet - magnet_stock
         suggestions.append(f"Magnet strips shortage: Need {shortage} more strips to cover all pending dividers")
 
-    # Overdue launches
     overdue_count = 0
     if not stores_df.empty and 'launch_date' in stores_df.columns:
         for _, store in stores_df.iterrows():
@@ -114,7 +110,6 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
     if overdue_count > 3:
         suggestions.append(f"+ {overdue_count - 3} additional overdue launches")
 
-    # Transport issues
     if not shipments_df.empty:
         no_transport_urgent = 0
         for _, ship in shipments_df.iterrows():
@@ -137,7 +132,6 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
         if no_transport_urgent > 0:
             suggestions.append(f"{no_transport_urgent} urgent shipment(s) still need transportation arranged")
 
-    # Overdue actions
     if action_items_df is not None and not action_items_df.empty:
         overdue_actions = 0
         for _, item in action_items_df.iterrows():
@@ -158,7 +152,6 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
         if overdue_actions > 0:
             suggestions.append(f"{overdue_actions} action item(s) past their ETA")
 
-    # Delayed shipments
     if not shipments_df.empty and 'delivery_status' in shipments_df.columns:
         delayed = shipments_df[shipments_df['delivery_status'] == 'Delayed']
         if not delayed.empty:
@@ -167,11 +160,80 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
     return '\n'.join(suggestions) if suggestions else 'No critical issues detected.'
 
 
+# ==================== DETAILED REPORT TABLE ====================
+
+def build_report_data(stores_df, shipments_df):
+    """Build the detailed report data from stores and shipments (no transport column)"""
+    report_rows = []
+
+    for _, store in stores_df.iterrows():
+        store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else pd.DataFrame()
+        s30 = store_ships['qty_30d'].sum() if not store_ships.empty else 0
+        s40 = store_ships['qty_40d'].sum() if not store_ships.empty else 0
+        s60 = store_ships['qty_60d'].sum() if not store_ships.empty else 0
+
+        launch = store.get('launch_date')
+        launch_str = str(launch) if launch else '-'
+        launched = '✅' if store.get('is_launched') else '❌'
+
+        rec30 = int(store.get('received_30d', 0) or 0)
+        rec40 = int(store.get('received_40d', 0) or 0)
+        rec60 = int(store.get('received_60d', 0) or 0)
+
+        report_rows.append({
+            'Store': store['name'],
+            'Location': store['location'] or '-',
+            'Launch Date': launch_str,
+            'Launched': launched,
+            'Req 30D': store['required_30d'],
+            'Ship 30D': int(s30),
+            'Rec 30D': rec30,
+            'Pending 30D': max(0, store['required_30d'] - int(s30)),
+            'Req 40D': store['required_40d'],
+            'Ship 40D': int(s40),
+            'Rec 40D': rec40,
+            'Pending 40D': max(0, store['required_40d'] - int(s40)),
+            'Req 60D': store['required_60d'],
+            'Ship 60D': int(s60),
+            'Rec 60D': rec60,
+            'Pending 60D': max(0, store['required_60d'] - int(s60)),
+        })
+
+    return pd.DataFrame(report_rows)
+
+
+def export_to_excel(report_df):
+    """Export report to Excel file"""
+    output = BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Stores Report"
+    ws.append(list(report_df.columns))
+    for _, row in report_df.iterrows():
+        ws.append(list(row))
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+def style_pending(val):
+    """Style pending cells based on value"""
+    try:
+        v = int(val)
+        if v > 0:
+            return 'color: #e74c3c; font-weight: 700;'
+        elif v == 0:
+            return 'color: #27ae60; font-weight: 600;'
+    except (ValueError, TypeError):
+        pass
+    return ''
+
+
 # ==================== MAIN RENDER ====================
 
 def render():
     st.markdown('# 📈 Reports')
-    st.caption('Configure, preview, and generate executive progress reports')
+    st.caption('Configure executive content, view detailed data, and generate reports')
 
     # Load all data
     settings = get_report_settings()
@@ -225,7 +287,6 @@ def render():
     </div>
     ''', unsafe_allow_html=True)
 
-    # Auto-suggest buttons (REPLACE behavior now)
     c1, c2 = st.columns(2)
     with c1:
         if st.button('💡 Auto-Generate Highlights', use_container_width=True, key='btn_suggest_h',
@@ -262,7 +323,6 @@ def render():
 
     st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
 
-    # Settings form
     with st.form('report_settings_form'):
         c1, c2 = st.columns(2)
 
@@ -324,8 +384,8 @@ def render():
             st.success('✅ Configuration saved!')
             st.rerun()
 
-    # ==================== GENERATE & EMAIL ====================
-    render_section_title('📥 Generate Report')
+    # ==================== GENERATE PDF & EMAIL ====================
+    render_section_title('📥 Generate Report & Email')
 
     st.markdown('''
     <div style="background: linear-gradient(135deg, rgba(255, 153, 0, 0.1) 0%, rgba(39, 174, 96, 0.1) 100%); 
@@ -336,10 +396,8 @@ def render():
     </div>
     ''', unsafe_allow_html=True)
 
-    # Get fresh settings
     current_settings = get_report_settings()
 
-    # Generate PDF buffer once
     try:
         pdf_buffer = generate_progress_report(
             current_settings,
@@ -354,7 +412,6 @@ def render():
         date_str = datetime.now().strftime('%Y%m%d')
         filename = f'launch_team_progress_W{week_str}_{date_str}.pdf'
 
-        # Generate email mailto link
         try:
             mailto_link = generate_dividers_mailto(
                 stocks, threshold, stores_df, shipments_df,
@@ -365,7 +422,6 @@ def render():
             mailto_link = None
             st.warning(f'⚠️ Email link generation failed: {e}')
 
-        # Two-button row
         c1, c2 = st.columns(2)
 
         with c1:
@@ -376,7 +432,7 @@ def render():
                 mime='application/pdf',
                 use_container_width=True,
                 type='primary',
-                help='Download the professional PDF report'
+                help='Download the executive PDF report for leadership review'
             )
 
         with c2:
@@ -396,7 +452,6 @@ def render():
 
         st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
 
-        # Workflow help
         with st.expander('📋 **How to send the report (Workflow)**', expanded=False):
             st.markdown('''
             **Step-by-step workflow:**
@@ -406,19 +461,60 @@ def render():
             3. 📎 In the email window, **attach the downloaded PDF** to the email
             4. ✏️ Add recipient(s) and any custom message if needed
             5. 🚀 Send!
-            
-            ---
-            
-            **💡 Pro tip:** The email body contains a quick summary of all data, so even without 
-            opening the PDF, recipients can see the current status at a glance.
             ''')
 
     except Exception as e:
         st.error(f'❌ Error generating report: {str(e)}')
         st.info('💡 Make sure `reportlab` is in your requirements.txt')
 
+    # ==================== DETAILED REPORT TABLE ====================
+    render_section_title('📊 Detailed Stores Report')
+
+    if stores_df.empty:
+        st.info("📭 No stores data to display.")
+        return
+
+    report_df = build_report_data(stores_df, shipments_df)
+
+    # Summary cards for the detailed view
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        render_stat_card("Total Stores", len(report_df), "card-stores", "bi-shop")
+    with c2:
+        total_req = report_df[['Req 30D', 'Req 40D', 'Req 60D']].sum().sum()
+        render_stat_card("Total Required", int(total_req), "card-30d", "bi-clipboard-check")
+    with c3:
+        total_ship = report_df[['Ship 30D', 'Ship 40D', 'Ship 60D']].sum().sum()
+        render_stat_card("Total Shipped", int(total_ship), "card-shipments", "bi-truck")
+    with c4:
+        total_pending = report_df[['Pending 30D', 'Pending 40D', 'Pending 60D']].sum().sum()
+        render_stat_card("Total Pending", int(total_pending), "card-40d", "bi-hourglass-split")
+
+    st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
+
+    # Styled dataframe
+    pending_cols = ['Pending 30D', 'Pending 40D', 'Pending 60D']
+    available_pending = [c for c in pending_cols if c in report_df.columns]
+
+    styled = report_df.style.map(style_pending, subset=available_pending)
+    st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    # Excel download
+    st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
+    
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        output = export_to_excel(report_df)
+        st.download_button(
+            label="📥 Download Detailed Report (Excel)",
+            data=output,
+            file_name=f"dividers_detailed_report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
     # ==================== WHAT'S INCLUDED ====================
-    with st.expander('👀 **What\'s included in the executive PDF report?**', expanded=False):
+    with st.expander('👀 **What\'s included in the executive PDF?**', expanded=False):
         st.markdown('''
         The executive PDF is designed for **leadership review** and includes:
         
@@ -433,15 +529,6 @@ def render():
         - **Critical Items Requiring Attention** (top 8 issues)
         - Dividers Inventory & Fulfillment summary
         - Magnet Coverage status
+        - Stores Detail (compact table)
         - Open Action Items
-        
-        ---
-        
-        ❌ **Not included** (intentionally — too detailed for leadership):
-        - Individual store rows
-        - Shipment-by-shipment details
-        - Transport ready/not ready per shipment
-        - Stock movement history
-        
-        💡 *For detailed views, use the dashboard pages directly.*
         ''')
