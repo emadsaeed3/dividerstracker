@@ -486,27 +486,69 @@ def load_css():
         box-shadow: {c['card_shadow']};
     }}
     
-    /* ===== DATAFRAMES / TABLES ===== */
+  /* ===== DATAFRAMES / TABLES - DARK MODE FIX ===== */
     [data-testid="stDataFrame"] {{
         border-radius: 12px;
         overflow: hidden;
         box-shadow: {c['card_shadow']};
         border: 1px solid {c['border_color']};
-        background: {c['bg_secondary']};
+        background: {c['bg_secondary']} !important;
     }}
-    [data-testid="stDataFrame"] thead tr th {{
+    
+    [data-testid="stDataFrame"] > div {{
+        background: {c['bg_secondary']} !important;
+    }}
+    
+    /* Header */
+    [data-testid="stDataFrame"] thead tr th,
+    [data-testid="stDataFrame"] [role="columnheader"] {{
         background: linear-gradient(90deg, #2c3e50 0%, #34495e 100%) !important;
         color: white !important;
         font-weight: 600 !important;
         text-transform: uppercase;
         font-size: 0.8rem !important;
     }}
-    [data-testid="stDataFrame"] tbody tr td {{
+    
+    /* Body cells */
+    [data-testid="stDataFrame"] tbody tr td,
+    [data-testid="stDataFrame"] [role="cell"],
+    [data-testid="stDataFrame"] [role="gridcell"] {{
         color: {c['text_primary']} !important;
-        background: {c['bg_secondary']};
+        background: {c['bg_secondary']} !important;
     }}
+    
+    /* Row hover */
     [data-testid="stDataFrame"] tbody tr:hover td {{
         background: {c['bg_tertiary']} !important;
+    }}
+    
+    /* Glide Data Grid (modern Streamlit) */
+    [data-testid="stDataFrame"] canvas {{
+        background: {c['bg_secondary']} !important;
+    }}
+    
+    /* Row backgrounds */
+    [data-testid="stDataFrame"] [data-testid="StyledDataFrameDataCell"] {{
+        background: {c['bg_secondary']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Row separators */
+    [data-testid="stDataFrame"] tbody tr {{
+        background: {c['bg_secondary']} !important;
+        border-bottom: 1px solid {c['border_color']} !important;
+    }}
+    
+    /* Index column */
+    [data-testid="stDataFrame"] [data-testid="StyledIndex"] {{
+        background: {c['bg_tertiary']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Glide grid container */
+    [data-testid="stDataFrame"] .dvn-scroller,
+    [data-testid="stDataFrame"] .dvn-stack {{
+        background: {c['bg_secondary']} !important;
     }}
     
     /* ===== ALERTS ===== */
