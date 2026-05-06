@@ -4,11 +4,11 @@ Dashboard page
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from database import (
     get_threshold, get_stocks_dict, get_stores, get_shipments,
     get_upcoming_launches, get_magnet_stock, get_magnet_status_dict,
-    get_stock_history, get_client
+    get_client
 )
 from components import (
     render_stat_card, render_stock_card, render_progress_card,
@@ -18,10 +18,28 @@ from components import (
 from styles import get_plotly_theme
 
 
-def calculate_stock_alerts(stocks, stores_df, shipments_df, threshold):
-    """Calculate stock alerts based on required vs shipped"""
-    alerts = []
+def _to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except Exception:
+            try:
+                return pd.to_datetime(value).date()
+            except Exception:
+                return None
+    return None
 
+
+def calculate_stock_alerts(stocks, stores_df, shipments_df, threshold):
+    alerts = []
     for dtype in ['30D', '40D', '60D']:
         stock = stocks.get(dtype, 0)
         col = f'required_{dtype.lower()}'
@@ -35,12 +53,10 @@ def calculate_stock_alerts(stocks, stores_df, shipments_df, threshold):
             alerts.append(('danger', f'🚨 **Critical!** {dtype} shortage: Need to order **{shortage}** more units'))
         elif stock < threshold:
             alerts.append(('warning', f'⚠️ **Low stock:** {dtype} has only **{stock}** units left'))
-
     return alerts
 
 
 def calculate_launch_alerts():
-    """Calculate alerts for upcoming store launches"""
     alerts = []
     upcoming = get_upcoming_launches(days_ahead=4)
 
@@ -51,26 +67,54 @@ def calculate_launch_alerts():
         days_left = store['days_left']
         name = store['name']
         location = store.get('location') or 'N/A'
-        transport_ready = bool(store.get('transportation_ready', False))
 
         if days_left == 0:
-            alerts.append(('danger', f'🚀 **LAUNCHING TODAY:** {name} ({location}) — Make sure everything is delivered!'))
+            alerts.append(('danger', f'🚀 **LAUNCHING TODAY:** {name} ({location})'))
         elif days_left == 1:
             alerts.append(('danger', f'🚨 **Launch Tomorrow:** {name} ({location}) — Shipment must be out NOW!'))
         elif days_left == 2:
             alerts.append(('warning', f'⚠️ **Launch in 2 days:** {name} ({location}) — Schedule shipment today!'))
-            if not transport_ready:
-                alerts.append(('warning', f'🚚 **Transportation NOT ready** for {name} — Arrange transport today!'))
         elif days_left <= 4:
-            alerts.append(('info', f'📅 **Launch in {days_left} days:** {name} ({location}) — Prepare shipment soon.'))
-            if not transport_ready and days_left <= 3:
-                alerts.append(('warning', f'🚚 **Transportation not ready** for {name} — Arrange within 24h'))
+            alerts.append(('info', f'📅 **Launch in {days_left} days:** {name} ({location})'))
+
+    return alerts
+
+
+def calculate_transport_alerts(shipments_df):
+    """Alerts for shipments without transportation arranged"""
+    alerts = []
+    today = date.today()
+
+    if shipments_df.empty:
+        return alerts
+
+    for _, ship in shipments_df.iterrows():
+        status = ship.get('delivery_status') or 'Pending'
+        if status not in ('Pending', 'In Transit'):
+            continue
+
+        if bool(ship.get('transportation_ready', False)):
+            continue
+
+        scheduled = _to_date(ship.get('scheduled_date'))
+        if not scheduled:
+            continue
+
+        days = (scheduled - today).days
+        store_name = ship.get('store_name', 'Unknown')
+        ship_id = ship.get('id')
+
+        if days < 0:
+            alerts.append(('danger', f'🚛 **Transport NOT arranged** for shipment #{ship_id} to {store_name} (was due {abs(days)}d ago)'))
+        elif days <= 1:
+            alerts.append(('danger', f'🚛 **Transport NOT ready** for shipment #{ship_id} to {store_name} — delivers tomorrow!'))
+        elif days <= 2:
+            alerts.append(('warning', f'🚛 **Arrange transport** for shipment #{ship_id} to {store_name} ({days}d)'))
 
     return alerts
 
 
 def calculate_magnet_alerts(stocks):
-    """Calculate magnet coverage alerts"""
     alerts = []
     strips = get_magnet_stock()
     magnet_status = get_magnet_status_dict()
@@ -84,7 +128,7 @@ def calculate_magnet_alerts(stocks):
         shortage = total_without - strips
         alerts.append((
             'warning',
-            f'🧲 **Magnet shortage:** Need **{shortage}** more strips to cover all dividers ({total_without} dividers without magnet, only {strips} strips available)'
+            f'🧲 **Magnet shortage:** Need **{shortage}** more strips ({total_without} dividers without magnet, only {strips} strips available)'
         ))
 
     return alerts
@@ -93,8 +137,6 @@ def calculate_magnet_alerts(stocks):
 # ==================== TREND CHARTS ====================
 
 def render_stock_trend_chart():
-    """Render stock level changes over time"""
-    # Get last 30 days of history
     supabase = get_client()
     try:
         res = supabase.table('stock_history').select('*').order('date', desc=False).limit(200).execute()
@@ -109,12 +151,11 @@ def render_stock_trend_chart():
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date')
 
-    # Filter to last 60 days
     cutoff = pd.Timestamp.now() - pd.Timedelta(days=60)
     df = df[df['date'] >= cutoff]
 
     if df.empty:
-        st.info("📊 No recent stock activity in the last 60 days.")
+        st.info("📊 No recent stock activity.")
         return
 
     color_map = {'30D': '#3498db', '40D': '#e67e22', '60D': '#9b59b6'}
@@ -124,10 +165,8 @@ def render_stock_trend_chart():
         sub = df[df['divider_type'] == dtype]
         if not sub.empty:
             fig.add_trace(go.Scatter(
-                x=sub['date'],
-                y=sub['new_qty'],
-                mode='lines+markers',
-                name=dtype,
+                x=sub['date'], y=sub['new_qty'],
+                mode='lines+markers', name=dtype,
                 line=dict(color=color_map[dtype], width=2.5),
                 marker=dict(size=6)
             ))
@@ -141,20 +180,16 @@ def render_stock_trend_chart():
         yaxis=dict(title='Quantity'),
         **get_plotly_theme()
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
 
 def render_shipments_per_week_chart(shipments_df):
-    """Render shipments count per week"""
     if shipments_df.empty:
         st.info("📊 No shipments yet.")
         return
 
     df = shipments_df.copy()
     df['date'] = pd.to_datetime(df['date'])
-
-    # Filter last 12 weeks
     cutoff = pd.Timestamp.now() - pd.Timedelta(weeks=12)
     df = df[df['date'] >= cutoff]
 
@@ -162,18 +197,15 @@ def render_shipments_per_week_chart(shipments_df):
         st.info("📊 No shipments in the last 12 weeks.")
         return
 
-    # Group by week
     df['week'] = df['date'].dt.to_period('W').dt.start_time
     weekly = df.groupby('week').size().reset_index(name='count')
     weekly['week_str'] = weekly['week'].dt.strftime('%d %b')
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=weekly['week_str'],
-        y=weekly['count'],
+        x=weekly['week_str'], y=weekly['count'],
         marker_color='#3498db',
-        text=weekly['count'],
-        textposition='outside'
+        text=weekly['count'], textposition='outside'
     ))
 
     fig.update_layout(
@@ -184,20 +216,16 @@ def render_shipments_per_week_chart(shipments_df):
         yaxis=dict(title='Number of Shipments'),
         **get_plotly_theme()
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
 
 def render_delivery_status_trend(shipments_df):
-    """Render delivery status over time"""
     if shipments_df.empty or 'delivery_status' not in shipments_df.columns:
         st.info("📊 No shipment status data.")
         return
 
     df = shipments_df.copy()
     df['date'] = pd.to_datetime(df['date'])
-
-    # Last 30 days
     cutoff = pd.Timestamp.now() - pd.Timedelta(days=30)
     df = df[df['date'] >= cutoff]
 
@@ -205,71 +233,57 @@ def render_delivery_status_trend(shipments_df):
         st.info("📊 No recent shipments (last 30 days).")
         return
 
-    # Group by date + status
     df['date_only'] = df['date'].dt.date
     grouped = df.groupby(['date_only', 'delivery_status']).size().reset_index(name='count')
 
     status_colors = {
-        'Pending': '#f39c12',
-        'In Transit': '#3498db',
-        'Delivered': '#27ae60',
-        'Delayed': '#e74c3c'
+        'Pending': '#f39c12', 'In Transit': '#3498db',
+        'Delivered': '#27ae60', 'Delayed': '#e74c3c'
     }
 
     fig = go.Figure()
-
     for status in ['Pending', 'In Transit', 'Delivered', 'Delayed']:
         sub = grouped[grouped['delivery_status'] == status]
         if not sub.empty:
             fig.add_trace(go.Bar(
-                name=status,
-                x=sub['date_only'],
-                y=sub['count'],
+                name=status, x=sub['date_only'], y=sub['count'],
                 marker_color=status_colors.get(status, '#7f8c8d')
             ))
 
     fig.update_layout(
-        barmode='stack',
-        height=350,
+        barmode='stack', height=350,
         title=dict(text='<b>📦 Shipments by Status (Last 30 Days)</b>', font=dict(size=15)),
         margin=dict(t=50, b=40, l=40, r=20),
-        xaxis=dict(title='Date'),
-        yaxis=dict(title='Shipments'),
+        xaxis=dict(title='Date'), yaxis=dict(title='Shipments'),
         **get_plotly_theme()
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
 
 def render_launches_timeline(stores_df):
-    """Render upcoming launches timeline"""
     if stores_df.empty or 'launch_date' not in stores_df.columns:
         st.info("📊 No stores with launch dates.")
         return
 
     df = stores_df.copy()
     df = df[df['launch_date'].notna()]
-
     if df.empty:
         st.info("📊 No launches scheduled.")
         return
 
     df['launch_date'] = pd.to_datetime(df['launch_date'])
     today = pd.Timestamp.now().normalize()
-
-    # Next 60 days
     future_cutoff = today + pd.Timedelta(days=60)
     past_cutoff = today - pd.Timedelta(days=30)
     df = df[(df['launch_date'] >= past_cutoff) & (df['launch_date'] <= future_cutoff)]
 
     if df.empty:
-        st.info("📊 No launches in the next 60 days or last 30.")
+        st.info("📊 No launches in window.")
         return
 
     df = df.sort_values('launch_date')
     df['days_from_today'] = (df['launch_date'] - today).dt.days
 
-    # Color by launched status
     colors = []
     for _, row in df.iterrows():
         if row.get('is_launched'):
@@ -285,41 +299,35 @@ def render_launches_timeline(stores_df):
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=df['launch_date'],
-        y=df['name'],
+        x=df['launch_date'], y=df['name'],
         mode='markers+text',
         marker=dict(size=14, color=colors, line=dict(width=2, color='white')),
         text=df['days_from_today'].apply(lambda d: f'{d:+d}d' if d != 0 else 'Today'),
-        textposition='top center',
-        textfont=dict(size=10),
+        textposition='top center', textfont=dict(size=10),
         hovertemplate='<b>%{y}</b><br>Launch: %{x|%d %b %Y}<br>%{text}<extra></extra>'
     ))
 
-    # Today line
     fig.add_vline(
         x=today.timestamp() * 1000,
         line=dict(color='red', width=2, dash='dash'),
-        annotation_text='Today',
-        annotation_position='top'
+        annotation_text='Today', annotation_position='top'
     )
 
     fig.update_layout(
         height=max(300, 40 * len(df) + 100),
-        title=dict(text='<b>🚀 Launches Timeline (Last 30d + Next 60d)</b>', font=dict(size=15)),
+        title=dict(text='<b>🚀 Launches Timeline</b>', font=dict(size=15)),
         margin=dict(t=50, b=40, l=40, r=20),
         xaxis=dict(title='Launch Date'),
         yaxis=dict(title='', autorange='reversed'),
         showlegend=False,
         **get_plotly_theme()
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
 
 # ==================== MAIN RENDER ====================
 
 def render():
-    """Render the Dashboard page"""
     col_title, col_chip = st.columns([3, 1])
     with col_title:
         st.markdown("# 📊 Dashboard")
@@ -334,9 +342,10 @@ def render():
     # Alerts
     stock_alerts = calculate_stock_alerts(stocks, stores_df, shipments_df, threshold)
     launch_alerts = calculate_launch_alerts()
+    transport_alerts = calculate_transport_alerts(shipments_df)
     magnet_alerts = calculate_magnet_alerts(stocks)
 
-    all_alerts = launch_alerts + stock_alerts + magnet_alerts
+    all_alerts = launch_alerts + transport_alerts + stock_alerts + magnet_alerts
 
     if all_alerts:
         render_section_title("🔔 Alerts")
@@ -412,7 +421,7 @@ def render():
     with c3:
         render_stat_card("Without Magnet ⭕", total_without, "card-40d", "bi-x-circle")
 
-    # Analytics (existing)
+    # Analytics
     render_section_title("📊 Analytics")
     c1, c2 = st.columns([2, 1])
 
@@ -424,17 +433,15 @@ def render():
     with c2:
         render_pie_chart(stocks)
 
-    # ==================== TREND CHARTS ====================
+    # Trends
     render_section_title("📈 Trends & Insights")
 
-    # Row 1: Stock trend + Shipments per week
     c1, c2 = st.columns(2)
     with c1:
         render_stock_trend_chart()
     with c2:
         render_shipments_per_week_chart(shipments_df)
 
-    # Row 2: Delivery status + Launches timeline
     c1, c2 = st.columns(2)
     with c1:
         render_delivery_status_trend(shipments_df)
