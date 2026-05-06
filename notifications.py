@@ -1,11 +1,10 @@
 """
 Notifications System
-Generates live notifications from the current data (no DB table needed)
+Generates live notifications from the current data
 """
 from datetime import date, timedelta
 
 
-# Severity levels
 CRITICAL = 'critical'
 WARNING = 'warning'
 INFO = 'info'
@@ -103,7 +102,6 @@ def get_dividers_notifications(stocks, threshold, stores_df, shipments_df,
             days_left = (ld_obj - today).days
             name = store['name']
             loc = store.get('location') or 'N/A'
-            transport_ready = bool(store.get('transportation_ready', False))
 
             if days_left < 0:
                 notifications.append({
@@ -132,15 +130,6 @@ def get_dividers_notifications(stocks, threshold, stores_df, shipments_df,
                     'goto_page': 'Shipments',
                     'category': 'Launch',
                 })
-                if not transport_ready:
-                    notifications.append({
-                        'severity': CRITICAL,
-                        'title': 'Transport NOT Ready for ' + name,
-                        'message': name + ' launches tomorrow but transportation is not ready!',
-                        'section': 'dividers',
-                        'goto_page': 'Stores',
-                        'category': 'Transport',
-                    })
             elif days_left == 2:
                 notifications.append({
                     'severity': WARNING,
@@ -150,15 +139,6 @@ def get_dividers_notifications(stocks, threshold, stores_df, shipments_df,
                     'goto_page': 'Shipments',
                     'category': 'Launch',
                 })
-                if not transport_ready:
-                    notifications.append({
-                        'severity': WARNING,
-                        'title': 'Transport Not Ready for ' + name,
-                        'message': 'Arrange transport for ' + name + ' within 24 hours.',
-                        'section': 'dividers',
-                        'goto_page': 'Stores',
-                        'category': 'Transport',
-                    })
             elif days_left <= 4:
                 notifications.append({
                     'severity': INFO,
@@ -167,6 +147,61 @@ def get_dividers_notifications(stocks, threshold, stores_df, shipments_df,
                     'section': 'dividers',
                     'goto_page': 'Stores',
                     'category': 'Launch',
+                })
+
+    # ----- SHIPMENTS WITHOUT TRANSPORT -----
+    if not shipments_df.empty:
+        for _, ship in shipments_df.iterrows():
+            status = ship.get('delivery_status') or 'Pending'
+            if status not in ('Pending', 'In Transit'):
+                continue
+
+            transport_ready = bool(ship.get('transportation_ready', False))
+            if transport_ready:
+                continue
+
+            scheduled = ship.get('scheduled_date')
+            if not scheduled:
+                continue
+
+            try:
+                if isinstance(scheduled, str):
+                    sched_obj = date.fromisoformat(scheduled[:10])
+                else:
+                    sched_obj = scheduled
+            except Exception:
+                continue
+
+            days_to_delivery = (sched_obj - today).days
+            ship_id = ship.get('id')
+            store_name = str(ship.get('store_name', 'Unknown'))
+
+            if days_to_delivery < 0:
+                notifications.append({
+                    'severity': CRITICAL,
+                    'title': 'Shipment #' + str(ship_id) + ' Transport NOT Arranged',
+                    'message': 'Shipment to ' + store_name + ' was scheduled for ' + str(sched_obj) + ' but transport not arranged!',
+                    'section': 'dividers',
+                    'goto_page': 'Shipments',
+                    'category': 'Transport',
+                })
+            elif days_to_delivery <= 1:
+                notifications.append({
+                    'severity': CRITICAL,
+                    'title': 'Transport NOT Ready - Shipment #' + str(ship_id),
+                    'message': 'Shipment to ' + store_name + ' delivers tomorrow but transport not arranged!',
+                    'section': 'dividers',
+                    'goto_page': 'Shipments',
+                    'category': 'Transport',
+                })
+            elif days_to_delivery <= 2:
+                notifications.append({
+                    'severity': WARNING,
+                    'title': 'Arrange Transport - Shipment #' + str(ship_id),
+                    'message': 'Shipment to ' + store_name + ' delivers in ' + str(days_to_delivery) + ' days. Arrange transport!',
+                    'section': 'dividers',
+                    'goto_page': 'Shipments',
+                    'category': 'Transport',
                 })
 
     # ----- DELAYED SHIPMENTS -----
@@ -240,7 +275,7 @@ def get_dividers_notifications(stocks, threshold, stores_df, shipments_df,
                     'category': 'Discrepancy',
                 })
 
-    # ----- ACTION ITEMS (OVERDUE) -----
+    # ----- ACTION ITEMS -----
     if action_items_df is not None and not action_items_df.empty:
         for _, item in action_items_df.iterrows():
             if item.get('status') == 'Completed':
@@ -354,7 +389,6 @@ def get_it_notifications(it_stocks, threshold, rdcs_df, it_shipments_df,
             days_left = (ld_obj - today).days
             name = rdc['name']
             loc = rdc.get('location') or 'N/A'
-            transport_ready = bool(rdc.get('transportation_ready', False))
 
             if days_left == 0:
                 notifications.append({
@@ -374,16 +408,7 @@ def get_it_notifications(it_stocks, threshold, rdcs_df, it_shipments_df,
                     'goto_page': 'Shipments',
                     'category': 'Launch',
                 })
-            elif days_left == 2 and not transport_ready:
-                notifications.append({
-                    'severity': WARNING,
-                    'title': name + ' Transport Not Ready',
-                    'message': 'RDC ' + name + ' launches in 2 days but transport not ready.',
-                    'section': 'it',
-                    'goto_page': 'RDCs',
-                    'category': 'Transport',
-                })
-            elif 2 < days_left <= 4:
+            elif 1 < days_left <= 4:
                 notifications.append({
                     'severity': INFO,
                     'title': 'Upcoming: ' + name,
@@ -391,6 +416,61 @@ def get_it_notifications(it_stocks, threshold, rdcs_df, it_shipments_df,
                     'section': 'it',
                     'goto_page': 'RDCs',
                     'category': 'Launch',
+                })
+
+    # ----- IT SHIPMENTS WITHOUT TRANSPORT -----
+    if not it_shipments_df.empty:
+        for _, ship in it_shipments_df.iterrows():
+            status = ship.get('delivery_status') or 'Pending'
+            if status not in ('Pending', 'In Transit'):
+                continue
+
+            transport_ready = bool(ship.get('transportation_ready', False))
+            if transport_ready:
+                continue
+
+            scheduled = ship.get('scheduled_date')
+            if not scheduled:
+                continue
+
+            try:
+                if isinstance(scheduled, str):
+                    sched_obj = date.fromisoformat(scheduled[:10])
+                else:
+                    sched_obj = scheduled
+            except Exception:
+                continue
+
+            days_to_delivery = (sched_obj - today).days
+            ship_id = ship.get('id')
+            rdc_name = str(ship.get('rdc_name', 'Unknown'))
+
+            if days_to_delivery < 0:
+                notifications.append({
+                    'severity': CRITICAL,
+                    'title': 'IT Shipment #' + str(ship_id) + ' Transport NOT Arranged',
+                    'message': 'Shipment to ' + rdc_name + ' was scheduled for ' + str(sched_obj) + ' but transport not arranged!',
+                    'section': 'it',
+                    'goto_page': 'Shipments',
+                    'category': 'Transport',
+                })
+            elif days_to_delivery <= 1:
+                notifications.append({
+                    'severity': CRITICAL,
+                    'title': 'Transport NOT Ready - IT Shipment #' + str(ship_id),
+                    'message': 'Shipment to ' + rdc_name + ' delivers tomorrow but transport not arranged!',
+                    'section': 'it',
+                    'goto_page': 'Shipments',
+                    'category': 'Transport',
+                })
+            elif days_to_delivery <= 2:
+                notifications.append({
+                    'severity': WARNING,
+                    'title': 'Arrange Transport - IT Shipment #' + str(ship_id),
+                    'message': 'Shipment to ' + rdc_name + ' delivers in ' + str(days_to_delivery) + ' days. Arrange transport!',
+                    'section': 'it',
+                    'goto_page': 'Shipments',
+                    'category': 'Transport',
                 })
 
     # ----- DELAYED IT SHIPMENTS -----
@@ -425,7 +505,6 @@ def get_all_notifications():
 
     all_notifs = []
 
-    # Dividers
     try:
         stocks = get_stocks_dict()
         threshold = get_threshold()
@@ -439,10 +518,9 @@ def get_all_notifications():
             stocks, threshold, stores_df, shipments_df,
             magnet_stock, magnet_status, action_items_df
         ))
-    except Exception as e:
+    except Exception:
         pass
 
-    # IT
     try:
         it_stocks = get_it_stock_dict()
         threshold = get_threshold()
@@ -460,10 +538,9 @@ def get_all_notifications():
             it_stocks, threshold, rdcs_df, it_shipments_df,
             it_requirements, it_shipped_totals
         ))
-    except Exception as e:
+    except Exception:
         pass
 
-    # Sort by priority
     all_notifs.sort(key=lambda n: SEVERITY_CONFIG[n['severity']]['priority'])
 
     return all_notifs
