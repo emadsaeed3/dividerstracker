@@ -1,6 +1,5 @@
 """
 Progress Report page
-Manages report settings and generates PDF reports
 """
 import streamlit as st
 from datetime import date, datetime, timedelta
@@ -15,11 +14,8 @@ from pdf_generator import generate_progress_report
 
 
 def auto_suggest_highlights(stores_df, shipments_df):
-    """Auto-generate highlight suggestions"""
     suggestions = []
-    today = date.today()
 
-    # Recently launched stores
     if not stores_df.empty and 'is_launched' in stores_df.columns:
         launched = stores_df[stores_df['is_launched'] == True]
         if not launched.empty:
@@ -28,7 +24,6 @@ def auto_suggest_highlights(stores_df, shipments_df):
                 loc = store.get('location') or 'N/A'
                 suggestions.append(f"✓ {name} ({loc}) is launched and operational")
 
-    # Recent deliveries
     if not shipments_df.empty and 'delivery_status' in shipments_df.columns:
         delivered = shipments_df[shipments_df['delivery_status'] == 'Delivered']
         if not delivered.empty:
@@ -39,8 +34,8 @@ def auto_suggest_highlights(stores_df, shipments_df):
 
 
 def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df, magnet_stock, magnet_status):
-    """Auto-generate lowlight suggestions"""
     suggestions = []
+    today = date.today()
 
     # Stock shortages
     for dtype in ['30D', '40D', '60D']:
@@ -70,7 +65,6 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df, magnet_st
 
     # Overdue launches
     if not stores_df.empty and 'launch_date' in stores_df.columns:
-        today = date.today()
         for _, store in stores_df.iterrows():
             if store.get('is_launched'):
                 continue
@@ -85,20 +79,28 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df, magnet_st
                 days_left = (ld_obj - today).days
                 if days_left < 0:
                     suggestions.append(f"⚠ {store['name']} launch date passed ({abs(days_left)}d ago) - not yet launched")
-                elif days_left <= 2 and not store.get('transportation_ready'):
-                    suggestions.append(f"⚠ {store['name']} launches in {days_left}d - transportation NOT ready")
             except Exception:
                 pass
+
+    # Shipments without transport
+    if not shipments_df.empty:
+        no_transport = 0
+        for _, ship in shipments_df.iterrows():
+            status = ship.get('delivery_status') or 'Pending'
+            if status not in ('Pending', 'In Transit'):
+                continue
+            if not bool(ship.get('transportation_ready', False)):
+                no_transport += 1
+        if no_transport > 0:
+            suggestions.append(f"⚠ {no_transport} pending shipment(s) still need transportation arranged")
 
     return '\n'.join(suggestions) if suggestions else ''
 
 
 def render():
-    """Render the Progress Report page"""
     st.markdown('# 📄 Progress Report')
     st.caption('Configure report settings and generate professional PDF reports')
 
-    # Load data
     settings = get_report_settings()
     stocks = get_stocks_dict()
     threshold = get_threshold()
@@ -108,7 +110,6 @@ def render():
     magnet_status = get_magnet_status_dict()
     action_items_df = get_action_items()
 
-    # === QUICK STATS ===
     render_section_title('📊 Report Preview Stats')
 
     total_stores = len(stores_df) if not stores_df.empty else 0
@@ -137,7 +138,6 @@ def render():
     with c5:
         render_stat_card('Open Actions', open_actions, 'card-60d', 'bi-list-task')
 
-    # === AUTO-SUGGEST BUTTONS (outside forms) ===
     render_section_title('⚙️ Report Settings')
 
     st.markdown('''
@@ -147,7 +147,6 @@ def render():
     </div>
     ''', unsafe_allow_html=True)
 
-    # Auto-suggest buttons (outside form)
     c1, c2 = st.columns(2)
     with c1:
         if st.button('💡 Auto-Suggest Highlights', use_container_width=True, key='btn_suggest_h'):
@@ -192,14 +191,12 @@ def render():
 
     st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
 
-    # === MAIN SETTINGS FORM ===
     with st.form('report_settings_form'):
         c1, c2 = st.columns(2)
 
         week_number = c1.number_input(
             'Week Number',
-            min_value=1,
-            max_value=53,
+            min_value=1, max_value=53,
             value=int(settings.get('week_number') or 1)
         )
 
@@ -241,7 +238,7 @@ def render():
             'Lowlights',
             value=settings.get('lowlights') or '',
             height=120,
-            placeholder='• 30D stock shortage\n• Store X transport not ready',
+            placeholder='• 30D stock shortage\n• Transport not arranged',
             label_visibility='collapsed'
         )
 
@@ -255,21 +252,18 @@ def render():
             st.success('✅ Settings saved!')
             st.rerun()
 
-    # === GENERATE PDF ===
     render_section_title('📥 Generate Report')
 
     st.markdown('''
     <div style="background: rgba(39, 174, 96, 0.1); padding: 14px 18px; border-radius: 10px; 
                 border-left: 4px solid #27ae60; margin-bottom: 16px;">
-        🎯 <b>Ready to generate?</b> Click the button below to download a professional PDF report 
-        with all the current data and settings above.
+        🎯 <b>Ready to generate?</b> Click the button below to download a professional PDF report.
     </div>
     ''', unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         try:
-            # Reload settings to make sure we use the latest
             current_settings = get_report_settings()
 
             pdf_buffer = generate_progress_report(
@@ -297,28 +291,17 @@ def render():
             st.error(f'❌ Error generating PDF: {str(e)}')
             st.info('💡 Make sure `reportlab` is in your requirements.txt')
 
-    # === PREVIEW WHATS INCLUDED ===
     with st.expander('👀 **What\'s included in the report?**', expanded=False):
         st.markdown('''
         The generated PDF includes:
         
-        ### 📋 Content Sections:
-        
-        1. **Dark Header** — Title, week number, report dates, and Amazon Now logo
-        
-        2. **Executive Summary** — Your custom written summary
-        
-        3. **Highlights** — Dark box with bullet points of key achievements
-        
-        4. **Lowlights** — Dark box with bullet points of issues/challenges
-        
-        5. **Portfolio KPIs** — 5 key metric cards
-        
-        6. **Store Status Summary** — Full table with color-coded statuses
-        
-        7. **Dividers Summary** — Stock vs Requirements per type
-        
-        8. **Magnet Status** — With/Without magnet counts
-        
-        9. **Action Items** — All tasks with statuses
+        1. **Dark Header** with title, week number, dates, and Amazon Now logo
+        2. **Executive Summary** — your custom written summary
+        3. **Highlights** — key achievements
+        4. **Lowlights** — issues/challenges
+        5. **Portfolio KPIs** — 5 metric cards
+        6. **Store Status Summary** — color-coded table with transport per shipment
+        7. **Dividers Summary** — Stock vs Required per type
+        8. **Magnet Status** — coverage per type
+        9. **Action Items** — all tasks
         ''')
