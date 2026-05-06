@@ -355,8 +355,16 @@ def render():
 
     render_section_title("📋 All Stores")
 
-    col_filter1, col_filter2 = st.columns([1, 3])
-    with col_filter1:
+    # ============ SEARCH + FILTER ============
+    col_search, col_filter = st.columns([2, 1])
+    with col_search:
+        search_query = st.text_input(
+            "🔍 Search stores",
+            placeholder="Type store name or location...",
+            key='store_search',
+            label_visibility="collapsed"
+        )
+    with col_filter:
         status_filter = st.selectbox(
             "Filter",
             ['All', 'Launched only', 'Upcoming only'],
@@ -365,14 +373,31 @@ def render():
         )
 
     filtered_df = stores_df.copy()
+
+    # Apply status filter
     if status_filter == 'Launched only':
         filtered_df = filtered_df[filtered_df['is_launched'] == True]
     elif status_filter == 'Upcoming only':
         filtered_df = filtered_df[filtered_df['is_launched'] != True]
 
+    # Apply search
+    if search_query and search_query.strip():
+        s = search_query.strip().lower()
+        mask = (
+            filtered_df['name'].astype(str).str.lower().str.contains(s, na=False) |
+            filtered_df['location'].fillna('').astype(str).str.lower().str.contains(s, na=False)
+        )
+        filtered_df = filtered_df[mask]
+
     if filtered_df.empty:
-        st.info("📭 No stores match the filter.")
+        if search_query:
+            st.info("🔍 No stores match your search '" + search_query + "'")
+        else:
+            st.info("📭 No stores match the filter.")
         return
+
+    # Show count
+    st.caption("Showing **" + str(len(filtered_df)) + "** of **" + str(len(stores_df)) + "** stores")
 
     stores_list = list(filtered_df.iterrows())
 
