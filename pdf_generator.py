@@ -1,6 +1,6 @@
 """
 PDF Report Generator
-Generates professional progress reports similar to the reference design
+Generates professional progress reports
 """
 import os
 from io import BytesIO
@@ -8,13 +8,11 @@ from datetime import date, datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm, mm
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+from reportlab.lib.units import cm
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    Image, PageBreak, KeepTogether
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 )
-from reportlab.pdfgen import canvas
 
 
 # ==================== COLORS ====================
@@ -30,13 +28,11 @@ ACCENT_YELLOW = colors.HexColor('#F39C12')
 
 HIGHLIGHT_BG = colors.HexColor('#2C3E50')
 LOWLIGHT_BG = colors.HexColor('#34495E')
-TEXT_ON_DARK = colors.HexColor('#ECF0F1')
 TEXT_DARK = colors.HexColor('#2C3E50')
 TEXT_GRAY = colors.HexColor('#7F8C8D')
 DIVIDER_GRAY = colors.HexColor('#BDC3C7')
 
 
-# Color hex strings for inline HTML (para tags need #RRGGBB format)
 COLOR_HEX = {
     'DARK_HEADER': '#2C3E50',
     'ACCENT_BLUE': '#3498DB',
@@ -50,57 +46,22 @@ COLOR_HEX = {
 }
 
 
-# ==================== STYLES ====================
-
 def get_styles():
-    """Return custom paragraph styles"""
     styles = getSampleStyleSheet()
 
     styles.add(ParagraphStyle(
-        name='ReportTitle',
-        fontName='Helvetica-Bold',
-        fontSize=16,
-        textColor=colors.white,
-        alignment=TA_LEFT,
-        spaceAfter=4,
+        name='ReportTitle', fontName='Helvetica-Bold', fontSize=16,
+        textColor=colors.white, alignment=TA_LEFT, spaceAfter=4,
     ))
 
     styles.add(ParagraphStyle(
-        name='ReportSubtitle',
-        fontName='Helvetica',
-        fontSize=9,
-        textColor=colors.white,
-        alignment=TA_LEFT,
+        name='ReportSubtitle', fontName='Helvetica', fontSize=9,
+        textColor=colors.white, alignment=TA_LEFT,
     ))
 
     styles.add(ParagraphStyle(
-        name='SectionHeader',
-        fontName='Helvetica-Bold',
-        fontSize=12,
-        textColor=TEXT_DARK,
-        alignment=TA_LEFT,
-        spaceBefore=12,
-        spaceAfter=6,
-        borderPadding=4,
-    ))
-
-    styles.add(ParagraphStyle(
-        name='BodyTextCustom',
-        fontName='Helvetica',
-        fontSize=9,
-        textColor=TEXT_DARK,
-        alignment=TA_JUSTIFY,
-        leading=12,
-    ))
-
-    styles.add(ParagraphStyle(
-        name='BulletText',
-        fontName='Helvetica',
-        fontSize=9,
-        textColor=colors.white,
-        alignment=TA_LEFT,
-        leading=13,
-        leftIndent=10,
+        name='BodyTextCustom', fontName='Helvetica', fontSize=9,
+        textColor=TEXT_DARK, alignment=TA_JUSTIFY, leading=12,
     ))
 
     return styles
@@ -109,7 +70,6 @@ def get_styles():
 # ==================== HEADER ====================
 
 def build_header(week_number, report_date, next_update, styles):
-    """Build the dark report header"""
     logo_path = 'Now-PrimaryLogo-White.png'
     logo_element = ''
 
@@ -122,7 +82,6 @@ def build_header(week_number, report_date, next_update, styles):
         logo_element = Paragraph('<b>amazon now</b>', styles['ReportTitle'])
 
     title_text = 'LAUNCH TEAM TRACKER - PROGRESS REPORT'
-
     report_date_str = report_date.strftime('%d %b %Y') if report_date else '—'
     next_update_str = next_update.strftime('%d %b %Y') if next_update else '—'
     subtitle = 'Week ' + str(week_number) + ' | Report Date: ' + report_date_str + ' | Next Update: ' + next_update_str
@@ -152,7 +111,6 @@ def build_header(week_number, report_date, next_update, styles):
 # ==================== SECTION HEADER ====================
 
 def build_section_header(title):
-    """Build a section header with thin line"""
     elements = []
     para = Paragraph(
         '<para fontSize="12" fontName="Helvetica-Bold" textColor="' + COLOR_HEX['TEXT_DARK'] + '">'
@@ -175,7 +133,6 @@ def build_section_header(title):
 # ==================== EXECUTIVE SUMMARY ====================
 
 def build_executive_summary(text, styles):
-    """Build executive summary section"""
     elements = []
     elements.extend(build_section_header('Executive Summary'))
 
@@ -195,7 +152,6 @@ def build_executive_summary(text, styles):
 # ==================== HIGHLIGHTS / LOWLIGHTS ====================
 
 def build_highlights_box(bullets_text, bg_color):
-    """Build a dark box with bullets for highlights/lowlights"""
     if not bullets_text or not bullets_text.strip():
         bullets_text = 'None reported.'
 
@@ -205,7 +161,6 @@ def build_highlights_box(bullets_text, bg_color):
     for line in lines:
         clean_line = line.lstrip('•-*').strip()
         if clean_line:
-            # Escape special HTML chars
             clean_line = clean_line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             bullet_html += '<para fontName="Helvetica" fontSize="9" textColor="#FFFFFF" leading="13" leftIndent="10">• ' + clean_line + '</para>'
 
@@ -227,7 +182,6 @@ def build_highlights_box(bullets_text, bg_color):
 
 
 def build_highlights_section(highlights_text):
-    """Build highlights section"""
     elements = []
     elements.extend(build_section_header('Highlights'))
     elements.append(build_highlights_box(highlights_text, HIGHLIGHT_BG))
@@ -236,7 +190,6 @@ def build_highlights_section(highlights_text):
 
 
 def build_lowlights_section(lowlights_text):
-    """Build lowlights section"""
     elements = []
     elements.extend(build_section_header('Lowlights'))
     elements.append(build_highlights_box(lowlights_text, LOWLIGHT_BG))
@@ -247,14 +200,10 @@ def build_lowlights_section(lowlights_text):
 # ==================== KPI CARDS ====================
 
 def build_kpi_cards(kpis):
-    """Build Portfolio KPI cards row
-    kpis: list of tuples (value, label, color_hex_string)
-    """
     elements = []
     elements.extend(build_section_header('Portfolio Key Performance Indicators'))
 
     styles = getSampleStyleSheet()
-
     cards_row = []
     for value, label, color_hex in kpis:
         number_para = Paragraph(
@@ -288,8 +237,6 @@ def build_kpi_cards(kpis):
     cards_table.setStyle(TableStyle([
         ('LEFTPADDING', (0, 0), (-1, -1), 3),
         ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-        ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
 
     elements.append(cards_table)
@@ -300,7 +247,6 @@ def build_kpi_cards(kpis):
 # ==================== STORE STATUS TABLE ====================
 
 def get_store_status(store, shipped_total, required_total):
-    """Determine store status and color"""
     is_launched = bool(store.get('is_launched', False))
     launch_date_val = store.get('launch_date')
 
@@ -332,7 +278,6 @@ def get_store_status(store, shipped_total, required_total):
 
 
 def build_stores_table(stores_df, shipments_df):
-    """Build store status summary table"""
     elements = []
     elements.extend(build_section_header('Store Status Summary'))
 
@@ -344,16 +289,7 @@ def build_stores_table(stores_df, shipments_df):
         elements.append(Spacer(1, 12))
         return elements
 
-    header = [
-        'Store',
-        'Location',
-        'Launch Date',
-        'Progress',
-        'Status',
-        'Transport',
-        'Pending'
-    ]
-
+    header = ['Store', 'Location', 'Launch Date', 'Progress', 'Status', 'Pending']
     rows = [header]
     row_statuses = []
 
@@ -386,20 +322,17 @@ def build_stores_table(stores_df, shipments_df):
         else:
             launch_str = '—'
 
-        transport = '✓ Ready' if store.get('transportation_ready') else '✗ Not Ready'
-
         rows.append([
-            str(store['name'])[:20],
-            str(store['location'] or '—')[:18],
+            str(store['name'])[:22],
+            str(store['location'] or '—')[:20],
             launch_str,
             str(int(pct)) + '%',
             status_label,
-            transport,
             str(pending_total)
         ])
         row_statuses.append(status_color)
 
-    col_widths = [2.8 * cm, 2.8 * cm, 2.3 * cm, 1.8 * cm, 2 * cm, 2.3 * cm, 1.8 * cm]
+    col_widths = [3.2 * cm, 3 * cm, 2.5 * cm, 2 * cm, 2.3 * cm, 1.8 * cm]
     table = Table(rows, colWidths=col_widths, repeatRows=1)
 
     style = TableStyle([
@@ -410,7 +343,7 @@ def build_stores_table(stores_df, shipments_df):
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 8),
         ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
-        ('ALIGN', (3, 0), (6, -1), 'CENTER'),
+        ('ALIGN', (3, 0), (5, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ('RIGHTPADDING', (0, 0), (-1, -1), 6),
@@ -431,10 +364,126 @@ def build_stores_table(stores_df, shipments_df):
     return elements
 
 
-# ==================== DIVIDERS SUMMARY TABLE ====================
+# ==================== SHIPMENTS TABLE ====================
+
+def build_shipments_table(shipments_df):
+    """Build shipments table with transport status per shipment"""
+    elements = []
+    
+    if shipments_df.empty:
+        return elements
+    
+    # Filter pending/in transit only
+    if 'delivery_status' in shipments_df.columns:
+        active = shipments_df[shipments_df['delivery_status'].isin(['Pending', 'In Transit', 'Delayed'])]
+    else:
+        active = shipments_df
+
+    if active.empty:
+        return elements
+
+    elements.extend(build_section_header('Active Shipments & Transport Status'))
+
+    header = ['ID', 'Store', 'Ship Date', 'Scheduled', 'Status', 'Transport', 'Items']
+    rows = [header]
+    row_status_colors = []
+    row_transport_colors = []
+
+    status_colors = {
+        'Pending': ACCENT_YELLOW,
+        'In Transit': ACCENT_BLUE,
+        'Delivered': ACCENT_GREEN,
+        'Delayed': ACCENT_RED,
+    }
+
+    for _, ship in active.head(15).iterrows():
+        ship_id = '#' + str(ship.get('id', ''))
+        store_name = str(ship.get('store_name', 'Unknown'))[:20]
+        
+        ship_date = ship.get('date')
+        if ship_date:
+            if isinstance(ship_date, str):
+                try:
+                    ship_date_str = date.fromisoformat(ship_date[:10]).strftime('%d %b')
+                except Exception:
+                    ship_date_str = str(ship_date)[:10]
+            else:
+                ship_date_str = ship_date.strftime('%d %b') if hasattr(ship_date, 'strftime') else str(ship_date)
+        else:
+            ship_date_str = '—'
+        
+        scheduled = ship.get('scheduled_date')
+        if scheduled:
+            if isinstance(scheduled, str):
+                try:
+                    sched_str = date.fromisoformat(scheduled[:10]).strftime('%d %b')
+                except Exception:
+                    sched_str = str(scheduled)[:10]
+            else:
+                sched_str = scheduled.strftime('%d %b') if hasattr(scheduled, 'strftime') else str(scheduled)
+        else:
+            sched_str = '—'
+        
+        status = ship.get('delivery_status') or 'Pending'
+        transport_ready = bool(ship.get('transportation_ready', False))
+        transport_text = '✓ Ready' if transport_ready else '✗ Not Ready'
+        
+        total_items = int(ship.get('qty_30d', 0) or 0) + int(ship.get('qty_40d', 0) or 0) + int(ship.get('qty_60d', 0) or 0)
+        
+        rows.append([
+            ship_id,
+            store_name,
+            ship_date_str,
+            sched_str,
+            status,
+            transport_text,
+            str(total_items)
+        ])
+        row_status_colors.append(status_colors.get(status, TEXT_GRAY))
+        row_transport_colors.append(ACCENT_GREEN if transport_ready else ACCENT_RED)
+
+    col_widths = [1.2 * cm, 3.5 * cm, 2 * cm, 2 * cm, 2.5 * cm, 2.8 * cm, 1.5 * cm]
+    table = Table(rows, colWidths=col_widths, repeatRows=1)
+
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_HEADER),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('ALIGN', (2, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_GRAY),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')]),
+    ])
+
+    # Color status column
+    for i, color in enumerate(row_status_colors, start=1):
+        style.add('BACKGROUND', (4, i), (4, i), color)
+        style.add('TEXTCOLOR', (4, i), (4, i), colors.white)
+        style.add('FONTNAME', (4, i), (4, i), 'Helvetica-Bold')
+
+    # Color transport column
+    for i, color in enumerate(row_transport_colors, start=1):
+        style.add('BACKGROUND', (5, i), (5, i), color)
+        style.add('TEXTCOLOR', (5, i), (5, i), colors.white)
+        style.add('FONTNAME', (5, i), (5, i), 'Helvetica-Bold')
+
+    table.setStyle(style)
+    elements.append(table)
+    elements.append(Spacer(1, 14))
+    return elements
+
+
+# ==================== DIVIDERS SUMMARY ====================
 
 def build_dividers_summary(stocks, stores_df, shipments_df):
-    """Build dividers stock summary"""
     elements = []
     elements.extend(build_section_header('Dividers Summary'))
 
@@ -454,12 +503,8 @@ def build_dividers_summary(stocks, stores_df, shipments_df):
         pct = (shipped / required * 100) if required > 0 else 0
 
         rows.append([
-            dtype,
-            str(stock),
-            str(required),
-            str(shipped),
-            str(pending),
-            str(int(pct)) + '%'
+            dtype, str(stock), str(required), str(shipped),
+            str(pending), str(int(pct)) + '%'
         ])
         row_colors.append(color_map.get(dtype, ACCENT_BLUE))
 
@@ -472,12 +517,8 @@ def build_dividers_summary(stocks, stores_df, shipments_df):
     total_pct = (total_ship / total_req * 100) if total_req > 0 else 0
 
     rows.append([
-        'TOTAL',
-        str(total_stock),
-        str(total_req),
-        str(total_ship),
-        str(total_pending),
-        str(int(total_pct)) + '%'
+        'TOTAL', str(total_stock), str(total_req), str(total_ship),
+        str(total_pending), str(int(total_pct)) + '%'
     ])
 
     col_widths = [2.5 * cm, 3 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm]
@@ -515,14 +556,13 @@ def build_dividers_summary(stocks, stores_df, shipments_df):
 # ==================== MAGNET STATUS ====================
 
 def build_magnet_summary(magnet_stock, magnet_status):
-    """Build magnet summary table"""
     elements = []
     elements.extend(build_section_header('Magnet Status'))
 
     info_para = Paragraph(
         '<para fontSize="9" fontName="Helvetica" textColor="' + COLOR_HEX['TEXT_DARK'] + '">'
         '<b>Strips at Vendor:</b> ' + str(magnet_stock) + ' | '
-        'Each strip can magnetize ~1 divider (3 squares + 1 rectangle)</para>',
+        'Each strip can magnetize ~1 divider</para>',
         getSampleStyleSheet()['Normal']
     )
     elements.append(info_para)
@@ -551,13 +591,7 @@ def build_magnet_summary(magnet_stock, magnet_status):
 
     grand_total = total_with + total_without
     grand_pct = (total_with / grand_total * 100) if grand_total > 0 else 0
-    rows.append([
-        'TOTAL',
-        str(total_with),
-        str(total_without),
-        str(grand_total),
-        str(int(grand_pct)) + '%'
-    ])
+    rows.append(['TOTAL', str(total_with), str(total_without), str(grand_total), str(int(grand_pct)) + '%'])
 
     col_widths = [3 * cm, 3 * cm, 3.5 * cm, 2.5 * cm, 3 * cm]
     table = Table(rows, colWidths=col_widths, repeatRows=1)
@@ -594,7 +628,6 @@ def build_magnet_summary(magnet_stock, magnet_status):
 # ==================== ACTION ITEMS TABLE ====================
 
 def build_action_items_table(items_df):
-    """Build action items table"""
     elements = []
     elements.extend(build_section_header('Action Items'))
 
@@ -626,7 +659,7 @@ def build_action_items_table(items_df):
                 except Exception:
                     eta_str = str(eta)
             else:
-                eta_str = eta.strftime('%d %b %Y')
+                eta_str = eta.strftime('%d %b %Y') if hasattr(eta, 'strftime') else str(eta)
         else:
             eta_str = '—'
 
@@ -635,14 +668,7 @@ def build_action_items_table(items_df):
         owner = str(item.get('owner') or '—')[:20]
         store_name = str(item.get('store_name') or '—')[:18]
 
-        rows.append([
-            str(idx),
-            action,
-            owner,
-            eta_str,
-            status,
-            store_name
-        ])
+        rows.append([str(idx), action, owner, eta_str, status, store_name])
         row_statuses.append(status_colors.get(status, TEXT_GRAY))
 
     col_widths = [0.8 * cm, 5.5 * cm, 2.8 * cm, 2.3 * cm, 2.5 * cm, 3.1 * cm]
@@ -680,7 +706,6 @@ def build_action_items_table(items_df):
 # ==================== FOOTER ====================
 
 def add_page_number(canvas_obj, doc):
-    """Add page number footer"""
     canvas_obj.saveState()
     canvas_obj.setFont('Helvetica', 8)
     canvas_obj.setFillColor(TEXT_GRAY)
@@ -700,16 +725,12 @@ def generate_progress_report(
     action_items_df,
     report_date=None
 ):
-    """Generate the complete progress report PDF"""
     buffer = BytesIO()
 
     doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=2 * cm,
-        rightMargin=2 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
+        buffer, pagesize=A4,
+        leftMargin=2 * cm, rightMargin=2 * cm,
+        topMargin=1.5 * cm, bottomMargin=1.5 * cm,
         title='Launch Team Tracker Report'
     )
 
@@ -731,20 +752,14 @@ def generate_progress_report(
     if not report_date:
         report_date = date.today()
 
-    # HEADER
     story.append(build_header(week_num, report_date, next_update, styles))
     story.append(Spacer(1, 16))
 
-    # EXECUTIVE SUMMARY
     story.extend(build_executive_summary(exec_summary, styles))
-
-    # HIGHLIGHTS
     story.extend(build_highlights_section(highlights))
-
-    # LOWLIGHTS
     story.extend(build_lowlights_section(lowlights))
 
-    # KPI CARDS
+    # KPI cards
     total_stores = len(stores_df) if not stores_df.empty else 0
     launched_count = len(stores_df[stores_df['is_launched'] == True]) if not stores_df.empty and 'is_launched' in stores_df.columns else 0
     upcoming_count = total_stores - launched_count
@@ -768,16 +783,10 @@ def generate_progress_report(
     ]
     story.extend(build_kpi_cards(kpis))
 
-    # STORE STATUS TABLE
     story.extend(build_stores_table(stores_df, shipments_df))
-
-    # DIVIDERS SUMMARY
+    story.extend(build_shipments_table(shipments_df))
     story.extend(build_dividers_summary(stocks, stores_df, shipments_df))
-
-    # MAGNET STATUS
     story.extend(build_magnet_summary(magnet_stock, magnet_status))
-
-    # ACTION ITEMS
     story.extend(build_action_items_table(action_items_df))
 
     doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
