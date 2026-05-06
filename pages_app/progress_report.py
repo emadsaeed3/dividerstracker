@@ -1,5 +1,5 @@
 """
-Progress Report page
+Progress Report page - Unified PDF + Email Generation
 """
 import streamlit as st
 from datetime import date, datetime, timedelta
@@ -7,33 +7,59 @@ from database import (
     get_report_settings, update_report_settings,
     get_stores, get_shipments, get_stocks_dict, get_threshold,
     get_magnet_stock, get_magnet_status_dict,
-    get_action_items, get_upcoming_launches
+    get_action_items, get_upcoming_launches, get_discrepancies
 )
 from components import render_section_title, render_stat_card
 from pdf_generator import generate_progress_report
+from email_drafts import generate_dividers_mailto
 
 
-def auto_suggest_highlights(stores_df, shipments_df):
+# ==================== AUTO-SUGGEST ====================
+
+def auto_suggest_highlights(stores_df, shipments_df, action_items_df):
+    """Generate highlights from current data (REPLACES existing)"""
     suggestions = []
 
+    # Launched stores
     if not stores_df.empty and 'is_launched' in stores_df.columns:
         launched = stores_df[stores_df['is_launched'] == True]
-        if not launched.empty:
+        if len(launched) > 0:
+            suggestions.append(f"{len(launched)} store(s) successfully launched and operational")
             for _, store in launched.head(3).iterrows():
                 name = store['name']
                 loc = store.get('location') or 'N/A'
-                suggestions.append(f"✓ {name} ({loc}) is launched and operational")
+                suggestions.append(f"{name} ({loc}) is live")
 
+    # Delivered shipments
     if not shipments_df.empty and 'delivery_status' in shipments_df.columns:
         delivered = shipments_df[shipments_df['delivery_status'] == 'Delivered']
         if not delivered.empty:
             total_delivered = len(delivered)
-            suggestions.append(f"✓ {total_delivered} shipments successfully delivered to stores")
+            total_units = int(delivered['qty_30d'].sum()) + int(delivered['qty_40d'].sum()) + int(delivered['qty_60d'].sum())
+            suggestions.append(f"{total_delivered} shipment(s) delivered successfully ({total_units} total units)")
 
-    return '\n'.join(suggestions) if suggestions else ''
+    # Completed actions
+    if action_items_df is not None and not action_items_df.empty and 'status' in action_items_df.columns:
+        completed = action_items_df[action_items_df['status'] == 'Completed']
+        if not completed.empty:
+            suggestions.append(f"{len(completed)} action item(s) completed this period")
+
+    # Stock health
+    stocks = get_stocks_dict()
+    threshold = get_threshold()
+    healthy_types = []
+    for dtype in ['30D', '40D', '60D']:
+        if stocks.get(dtype, 0) >= threshold:
+            healthy_types.append(dtype)
+    if len(healthy_types) == 3:
+        suggestions.append("All divider types have healthy stock levels at vendor")
+
+    return '\n'.join(suggestions) if suggestions else 'No highlights to report at this time.'
 
 
-def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df, magnet_stock, magnet_status):
+def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df,
+                            magnet_stock, magnet_status, action_items_df):
+    """Generate lowlights from current data (REPLACES existing)"""
     suggestions = []
     today = date.today()
 
@@ -46,13 +72,13 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df, magnet_st
         shipped = shipments_df[ship_col].sum() if not shipments_df.empty else 0
         remaining = max(0, required - shipped)
 
-        if stock < remaining:
+        if stock == 0 and remaining > 0:
+            suggestions.append(f"{dtype} OUT OF STOCK - immediate procurement required ({remaining} units pending)")
+        elif stock < remaining:
             shortage = remaining - stock
-            suggestions.append(f"⚠ {dtype} shortage: Need {shortage} more units to cover pending")
-        elif stock < threshold and stock > 0:
-            suggestions.append(f"⚠ {dtype} low stock: Only {stock} units left")
-        elif stock == 0:
-            suggestions.append(f"❌ {dtype} OUT OF STOCK")
+            suggestions.append(f"{dtype} stock shortage: Need {shortage} more units to fulfill pending shipments")
+        elif 0 < stock < threshold:
+            suggestions.append(f"{dtype} stock running low ({stock} units left, threshold: {threshold})")
 
     # Magnet shortage
     total_without_magnet = sum(
@@ -61,9 +87,10 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df, magnet_st
     )
     if total_without_magnet > 0 and magnet_stock < total_without_magnet:
         shortage = total_without_magnet - magnet_stock
-        suggestions.append(f"⚠ Magnet strips shortage: Need {shortage} more to cover all dividers")
+        suggestions.append(f"Magnet strips shortage: Need {shortage} more strips to cover all pending dividers")
 
     # Overdue launches
+    overdue_count = 0
     if not stores_df.empty and 'launch_date' in stores_df.columns:
         for _, store in stores_df.iterrows():
             if store.get('is_launched'):
@@ -78,29 +105,75 @@ def auto_suggest_lowlights(stocks, threshold, stores_df, shipments_df, magnet_st
                     ld_obj = ld
                 days_left = (ld_obj - today).days
                 if days_left < 0:
-                    suggestions.append(f"⚠ {store['name']} launch date passed ({abs(days_left)}d ago) - not yet launched")
+                    overdue_count += 1
+                    if overdue_count <= 3:
+                        suggestions.append(f"{store['name']} launch overdue by {abs(days_left)} days")
             except Exception:
                 pass
 
-    # Shipments without transport
+    if overdue_count > 3:
+        suggestions.append(f"+ {overdue_count - 3} additional overdue launches")
+
+    # Transport issues
     if not shipments_df.empty:
-        no_transport = 0
+        no_transport_urgent = 0
         for _, ship in shipments_df.iterrows():
             status = ship.get('delivery_status') or 'Pending'
             if status not in ('Pending', 'In Transit'):
                 continue
-            if not bool(ship.get('transportation_ready', False)):
-                no_transport += 1
-        if no_transport > 0:
-            suggestions.append(f"⚠ {no_transport} pending shipment(s) still need transportation arranged")
+            if bool(ship.get('transportation_ready', False)):
+                continue
+            scheduled = ship.get('scheduled_date')
+            if scheduled:
+                try:
+                    if isinstance(scheduled, str):
+                        sched_obj = date.fromisoformat(scheduled[:10])
+                    else:
+                        sched_obj = scheduled
+                    if (sched_obj - today).days <= 2:
+                        no_transport_urgent += 1
+                except Exception:
+                    pass
+        if no_transport_urgent > 0:
+            suggestions.append(f"{no_transport_urgent} urgent shipment(s) still need transportation arranged")
 
-    return '\n'.join(suggestions) if suggestions else ''
+    # Overdue actions
+    if action_items_df is not None and not action_items_df.empty:
+        overdue_actions = 0
+        for _, item in action_items_df.iterrows():
+            if item.get('status') == 'Completed':
+                continue
+            eta = item.get('eta')
+            if not eta:
+                continue
+            try:
+                if isinstance(eta, str):
+                    eta_obj = date.fromisoformat(eta)
+                else:
+                    eta_obj = eta
+                if (eta_obj - today).days < 0:
+                    overdue_actions += 1
+            except Exception:
+                pass
+        if overdue_actions > 0:
+            suggestions.append(f"{overdue_actions} action item(s) past their ETA")
 
+    # Delayed shipments
+    if not shipments_df.empty and 'delivery_status' in shipments_df.columns:
+        delayed = shipments_df[shipments_df['delivery_status'] == 'Delayed']
+        if not delayed.empty:
+            suggestions.append(f"{len(delayed)} shipment(s) currently marked as Delayed")
+
+    return '\n'.join(suggestions) if suggestions else 'No critical issues detected.'
+
+
+# ==================== MAIN RENDER ====================
 
 def render():
-    st.markdown('# 📄 Progress Report')
-    st.caption('Configure report settings and generate professional PDF reports')
+    st.markdown('# 📈 Reports')
+    st.caption('Configure, preview, and generate executive progress reports')
 
+    # Load all data
     settings = get_report_settings()
     stocks = get_stocks_dict()
     threshold = get_threshold()
@@ -109,7 +182,10 @@ def render():
     magnet_stock = get_magnet_stock()
     magnet_status = get_magnet_status_dict()
     action_items_df = get_action_items()
+    upcoming_launches = get_upcoming_launches(days_ahead=4)
+    discrepancies_df = get_discrepancies(stores_df, shipments_df)
 
+    # ==================== STATS PREVIEW ====================
     render_section_title('📊 Report Preview Stats')
 
     total_stores = len(stores_df) if not stores_df.empty else 0
@@ -138,59 +214,55 @@ def render():
     with c5:
         render_stat_card('Open Actions', open_actions, 'card-60d', 'bi-list-task')
 
-    render_section_title('⚙️ Report Settings')
+    # ==================== CONFIGURE ====================
+    render_section_title('⚙️ Report Configuration')
 
     st.markdown('''
     <div style="background: rgba(52, 152, 219, 0.1); padding: 12px 18px; border-radius: 10px; 
                 border-left: 4px solid #3498db; margin-bottom: 16px; font-size:0.9rem;">
-        💡 Configure the content of your report below. Use auto-suggest to add insights automatically from your data.
+        💡 Configure the executive content below. Use <b>Auto-Suggest</b> to <b>regenerate</b> highlights/lowlights from current data 
+        (this <b>replaces</b> existing content).
     </div>
     ''', unsafe_allow_html=True)
 
+    # Auto-suggest buttons (REPLACE behavior now)
     c1, c2 = st.columns(2)
     with c1:
-        if st.button('💡 Auto-Suggest Highlights', use_container_width=True, key='btn_suggest_h'):
-            suggestions = auto_suggest_highlights(stores_df, shipments_df)
-            if suggestions:
-                current_highlights = settings.get('highlights') or ''
-                new_highlights = current_highlights + ('\n' if current_highlights else '') + suggestions
-                update_report_settings(
-                    settings.get('report_title') or 'LAUNCH TEAM TRACKER - PROGRESS REPORT',
-                    settings.get('executive_summary') or '',
-                    new_highlights,
-                    settings.get('lowlights') or '',
-                    int(settings.get('week_number') or 1),
-                    settings.get('next_update_date')
-                )
-                st.success('✅ Highlights suggested and saved!')
-                st.rerun()
-            else:
-                st.info('💡 No highlights to suggest right now.')
+        if st.button('💡 Auto-Generate Highlights', use_container_width=True, key='btn_suggest_h',
+                      help='Replaces existing highlights with auto-generated content from current data'):
+            new_highlights = auto_suggest_highlights(stores_df, shipments_df, action_items_df)
+            update_report_settings(
+                settings.get('report_title') or 'LAUNCH TEAM TRACKER - PROGRESS REPORT',
+                settings.get('executive_summary') or '',
+                new_highlights,
+                settings.get('lowlights') or '',
+                int(settings.get('week_number') or 1),
+                settings.get('next_update_date')
+            )
+            st.success('✅ Highlights regenerated and saved!')
+            st.rerun()
 
     with c2:
-        if st.button('💡 Auto-Suggest Lowlights', use_container_width=True, key='btn_suggest_l'):
-            suggestions = auto_suggest_lowlights(
+        if st.button('💡 Auto-Generate Lowlights', use_container_width=True, key='btn_suggest_l',
+                      help='Replaces existing lowlights with auto-generated content from current data'):
+            new_lowlights = auto_suggest_lowlights(
                 stocks, threshold, stores_df, shipments_df,
-                magnet_stock, magnet_status
+                magnet_stock, magnet_status, action_items_df
             )
-            if suggestions:
-                current_lowlights = settings.get('lowlights') or ''
-                new_lowlights = current_lowlights + ('\n' if current_lowlights else '') + suggestions
-                update_report_settings(
-                    settings.get('report_title') or 'LAUNCH TEAM TRACKER - PROGRESS REPORT',
-                    settings.get('executive_summary') or '',
-                    settings.get('highlights') or '',
-                    new_lowlights,
-                    int(settings.get('week_number') or 1),
-                    settings.get('next_update_date')
-                )
-                st.success('✅ Lowlights suggested and saved!')
-                st.rerun()
-            else:
-                st.info('💡 No issues detected right now.')
+            update_report_settings(
+                settings.get('report_title') or 'LAUNCH TEAM TRACKER - PROGRESS REPORT',
+                settings.get('executive_summary') or '',
+                settings.get('highlights') or '',
+                new_lowlights,
+                int(settings.get('week_number') or 1),
+                settings.get('next_update_date')
+            )
+            st.success('✅ Lowlights regenerated and saved!')
+            st.rerun()
 
     st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
 
+    # Settings form
     with st.form('report_settings_form'):
         c1, c2 = st.columns(2)
 
@@ -220,88 +292,156 @@ def render():
         executive_summary = st.text_area(
             'Executive Summary',
             value=settings.get('executive_summary') or '',
-            height=100,
-            placeholder='Describe the overall progress...'
+            height=120,
+            placeholder='Provide a high-level overview of the current status, key achievements, and outlook...'
         )
 
-        st.markdown('**✅ Highlights** (one point per line)')
+        st.markdown('**✅ Highlights** (one point per line — these appear in the report)')
         highlights = st.text_area(
             'Highlights',
             value=settings.get('highlights') or '',
-            height=120,
-            placeholder='• Store A launched successfully\n• All shipments on track',
+            height=140,
+            placeholder='Major achievements, completed milestones, positive outcomes...',
             label_visibility='collapsed'
         )
 
-        st.markdown('**⚠️ Lowlights** (one point per line)')
+        st.markdown('**⚠️ Lowlights & Risks** (one point per line)')
         lowlights = st.text_area(
             'Lowlights',
             value=settings.get('lowlights') or '',
-            height=120,
-            placeholder='• 30D stock shortage\n• Transport not arranged',
+            height=140,
+            placeholder='Issues, blockers, risks requiring escalation...',
             label_visibility='collapsed'
         )
 
-        save_btn = st.form_submit_button('💾 Save Settings', use_container_width=True, type='primary')
+        save_btn = st.form_submit_button('💾 Save Configuration', use_container_width=True, type='primary')
 
         if save_btn:
             update_report_settings(
                 report_title, executive_summary, highlights, lowlights,
                 week_number, next_update_date
             )
-            st.success('✅ Settings saved!')
+            st.success('✅ Configuration saved!')
             st.rerun()
 
+    # ==================== GENERATE & EMAIL ====================
     render_section_title('📥 Generate Report')
 
     st.markdown('''
-    <div style="background: rgba(39, 174, 96, 0.1); padding: 14px 18px; border-radius: 10px; 
-                border-left: 4px solid #27ae60; margin-bottom: 16px;">
-        🎯 <b>Ready to generate?</b> Click the button below to download a professional PDF report.
+    <div style="background: linear-gradient(135deg, rgba(255, 153, 0, 0.1) 0%, rgba(39, 174, 96, 0.1) 100%); 
+                padding: 16px 20px; border-radius: 12px; 
+                border-left: 4px solid #FF9900; margin-bottom: 20px;">
+        🎯 <b>Ready to share?</b> Click below to <b>download the PDF</b> and 
+        <b>open your email client</b> with a pre-filled summary. Just attach the downloaded PDF and send!
     </div>
     ''', unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
+    # Get fresh settings
+    current_settings = get_report_settings()
+
+    # Generate PDF buffer once
+    try:
+        pdf_buffer = generate_progress_report(
+            current_settings,
+            stocks, threshold,
+            stores_df, shipments_df,
+            magnet_stock, magnet_status,
+            action_items_df,
+            report_date=date.today()
+        )
+
+        week_str = str(current_settings.get('week_number') or 1)
+        date_str = datetime.now().strftime('%Y%m%d')
+        filename = f'launch_team_progress_W{week_str}_{date_str}.pdf'
+
+        # Generate email mailto link
         try:
-            current_settings = get_report_settings()
-
-            pdf_buffer = generate_progress_report(
-                current_settings,
-                stocks, threshold,
-                stores_df, shipments_df,
-                magnet_stock, magnet_status,
-                action_items_df,
-                report_date=date.today()
+            mailto_link = generate_dividers_mailto(
+                stocks, threshold, stores_df, shipments_df,
+                magnet_stock, magnet_status, upcoming_launches,
+                discrepancies_df
             )
+        except Exception as e:
+            mailto_link = None
+            st.warning(f'⚠️ Email link generation failed: {e}')
 
-            week_str = str(current_settings.get('week_number') or 1)
-            date_str = datetime.now().strftime('%Y%m%d')
-            filename = f'progress_report_W{week_str}_{date_str}.pdf'
+        # Two-button row
+        c1, c2 = st.columns(2)
 
+        with c1:
             st.download_button(
-                label='📥 Download Progress Report PDF',
+                label='📥 Download PDF Report',
                 data=pdf_buffer,
                 file_name=filename,
                 mime='application/pdf',
                 use_container_width=True,
-                type='primary'
+                type='primary',
+                help='Download the professional PDF report'
             )
-        except Exception as e:
-            st.error(f'❌ Error generating PDF: {str(e)}')
-            st.info('💡 Make sure `reportlab` is in your requirements.txt')
 
-    with st.expander('👀 **What\'s included in the report?**', expanded=False):
+        with c2:
+            if mailto_link:
+                st.markdown(f'''
+                <a href="{mailto_link}" target="_blank" style="text-decoration:none;">
+                    <div style="background:#3498db; color:white; padding:0.6rem 1rem; 
+                                border-radius:0.5rem; text-align:center; font-weight:600; 
+                                cursor:pointer; transition:all 0.2s; border:1px solid #3498db;
+                                font-size:1rem;">
+                        📧 Open Email Draft
+                    </div>
+                </a>
+                ''', unsafe_allow_html=True)
+            else:
+                st.button('📧 Open Email Draft', disabled=True, use_container_width=True)
+
+        st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
+
+        # Workflow help
+        with st.expander('📋 **How to send the report (Workflow)**', expanded=False):
+            st.markdown('''
+            **Step-by-step workflow:**
+            
+            1. 📥 Click **"Download PDF Report"** — saves the PDF to your computer
+            2. 📧 Click **"Open Email Draft"** — opens your email client with subject + body pre-filled
+            3. 📎 In the email window, **attach the downloaded PDF** to the email
+            4. ✏️ Add recipient(s) and any custom message if needed
+            5. 🚀 Send!
+            
+            ---
+            
+            **💡 Pro tip:** The email body contains a quick summary of all data, so even without 
+            opening the PDF, recipients can see the current status at a glance.
+            ''')
+
+    except Exception as e:
+        st.error(f'❌ Error generating report: {str(e)}')
+        st.info('💡 Make sure `reportlab` is in your requirements.txt')
+
+    # ==================== WHAT'S INCLUDED ====================
+    with st.expander('👀 **What\'s included in the executive PDF report?**', expanded=False):
         st.markdown('''
-        The generated PDF includes:
+        The executive PDF is designed for **leadership review** and includes:
         
-        1. **Dark Header** with title, week number, dates, and Amazon Now logo
-        2. **Executive Summary** — your custom written summary
-        3. **Highlights** — key achievements
-        4. **Lowlights** — issues/challenges
-        5. **Portfolio KPIs** — 5 metric cards
-        6. **Store Status Summary** — color-coded table with transport per shipment
-        7. **Dividers Summary** — Stock vs Required per type
-        8. **Magnet Status** — coverage per type
-        9. **Action Items** — all tasks
+        **📋 Strategic Content** *(your custom input)*
+        - Executive Summary
+        - Highlights (achievements)
+        - Lowlights & Risks (issues/blockers)
+        
+        **📊 Data Insights** *(auto-generated)*
+        - Portfolio KPIs (5 key metrics)
+        - Store Status Distribution (visual breakdown)
+        - **Critical Items Requiring Attention** (top 8 issues)
+        - Dividers Inventory & Fulfillment summary
+        - Magnet Coverage status
+        - Open Action Items
+        
+        ---
+        
+        ❌ **Not included** (intentionally — too detailed for leadership):
+        - Individual store rows
+        - Shipment-by-shipment details
+        - Transport ready/not ready per shipment
+        - Stock movement history
+        
+        💡 *For detailed views, use the dashboard pages directly.*
         ''')
