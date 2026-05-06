@@ -113,9 +113,13 @@ def get_stock_history(limit=20):
 
 def clear_stock_history():
     """Clear all stock history entries"""
-    supabase = get_client()
-    # Supabase requires a filter; use a condition that matches all
-    supabase.table('stock_history').delete().neq('id', 0).execute()
+    try:
+        supabase = get_client()
+        supabase.table('stock_history').delete().neq('id', 0).execute()
+        return True
+    except Exception as e:
+        print(f"Error clearing history: {e}")
+        return False
 
 
 # ==================== STORES ====================
@@ -576,9 +580,13 @@ def update_report_settings(report_title, executive_summary, highlights, lowlight
 
 # ==================== PURCHASE ORDERS ====================
 
+PO_STATUSES = ['Draft', 'Sent to Vendor', 'Confirmed', 'In Production', 'Shipped', 'Received', 'Cancelled']
+
+
 def get_purchase_orders(status_filter=None):
     """Get all POs, optionally filtered by status"""
     try:
+        supabase = get_client()
         query = supabase.table('purchase_orders').select('*').order('po_date', desc=True)
         if status_filter:
             if isinstance(status_filter, list):
@@ -595,6 +603,7 @@ def get_purchase_orders(status_filter=None):
 def get_po_by_id(po_id):
     """Get single PO by ID"""
     try:
+        supabase = get_client()
         result = supabase.table('purchase_orders').select('*').eq('id', po_id).execute()
         if result.data:
             return result.data[0]
@@ -608,17 +617,20 @@ def add_purchase_order(po_number, vendor_name, po_date, expected_date,
                        qty_30d, qty_40d, qty_60d, status='Draft', notes=''):
     """Add new PO"""
     try:
+        supabase = get_client()
         data = {
             'po_number': po_number,
             'vendor_name': vendor_name or '',
             'po_date': po_date.isoformat() if hasattr(po_date, 'isoformat') else po_date,
-            'expected_date': expected_date.isoformat() if expected_date and hasattr(expected_date, 'isoformat') else expected_date,
             'qty_30d': int(qty_30d or 0),
             'qty_40d': int(qty_40d or 0),
             'qty_60d': int(qty_60d or 0),
             'status': status,
             'notes': notes or ''
         }
+        if expected_date:
+            data['expected_date'] = expected_date.isoformat() if hasattr(expected_date, 'isoformat') else expected_date
+
         result = supabase.table('purchase_orders').insert(data).execute()
         return result.data[0] if result.data else None
     except Exception as e:
@@ -628,28 +640,33 @@ def add_purchase_order(po_number, vendor_name, po_date, expected_date,
 
 def update_purchase_order(po_id, po_number, vendor_name, po_date, expected_date,
                           qty_30d, qty_40d, qty_60d, status, notes):
-    """Update PO (only if not Received/Cancelled)"""
+    """Update PO (only if not Received)"""
     try:
+        supabase = get_client()
         current = get_po_by_id(po_id)
         if not current:
             return False
-        
+
         # Lock if already received
         if current.get('status') == 'Received':
             return False
-        
+
         data = {
             'po_number': po_number,
             'vendor_name': vendor_name or '',
             'po_date': po_date.isoformat() if hasattr(po_date, 'isoformat') else po_date,
-            'expected_date': expected_date.isoformat() if expected_date and hasattr(expected_date, 'isoformat') else expected_date,
             'qty_30d': int(qty_30d or 0),
             'qty_40d': int(qty_40d or 0),
             'qty_60d': int(qty_60d or 0),
             'status': status,
             'notes': notes or '',
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.utcnow().isoformat()
         }
+        if expected_date:
+            data['expected_date'] = expected_date.isoformat() if hasattr(expected_date, 'isoformat') else expected_date
+        else:
+            data['expected_date'] = None
+
         supabase.table('purchase_orders').update(data).eq('id', po_id).execute()
         return True
     except Exception as e:
@@ -660,48 +677,57 @@ def update_purchase_order(po_id, po_number, vendor_name, po_date, expected_date,
 def receive_purchase_order(po_id):
     """Mark PO as Received and add quantities to stock"""
     try:
+        supabase = get_client()
         po = get_po_by_id(po_id)
         if not po:
             return False, "PO not found"
-        
+
         if po.get('status') == 'Received':
             return False, "PO already received"
-        
+
         if po.get('status') == 'Cancelled':
             return False, "Cannot receive cancelled PO"
-        
-        # Update stock for each divider type
+
         po_number = po.get('po_number', '')
+
+        # Update stock for each divider type
         for dtype, col in [('30D', 'qty_30d'), ('40D', 'qty_40d'), ('60D', 'qty_60d')]:
             qty = int(po.get(col, 0) or 0)
             if qty > 0:
-                # Add to vendor stock
-                current_stock = get_stock(dtype)
-                new_stock = current_stock + qty
-                
-                # Update stock
-                supabase.table('vendor_stock').update({
-                    'quantity': new_stock,
-                    'updated_at': datetime.now().isoformat()
-                }).eq('divider_type', dtype).execute()
-                
-                # Log movement
-                supabase.table('stock_movements').insert({
+                # Get current stock
+                stock_res = supabase.table('vendor_stock').select('*').eq('divider_type', dtype).execute()
+                old_qty = stock_res.data[0]['quantity'] if stock_res.data else 0
+                new_qty = old_qty + qty
+
+                # Update vendor stock
+                if stock_res.data:
+                    supabase.table('vendor_stock').update({
+                        'quantity': new_qty,
+                        'last_updated': datetime.utcnow().isoformat()
+                    }).eq('divider_type', dtype).execute()
+                else:
+                    supabase.table('vendor_stock').insert({
+                        'divider_type': dtype,
+                        'quantity': new_qty
+                    }).execute()
+
+                # Log in stock_history (using the same pattern as update_stock)
+                supabase.table('stock_history').insert({
                     'divider_type': dtype,
-                    'movement_type': 'IN',
-                    'quantity': qty,
-                    'notes': f'PO Received #{po_number}',
-                    'movement_date': date.today().isoformat()
+                    'old_qty': old_qty,
+                    'new_qty': new_qty,
+                    'change': qty,
+                    'note': f'PO Received #{po_number}'
                 }).execute()
-        
+
         # Update PO status
         supabase.table('purchase_orders').update({
             'status': 'Received',
             'received_date': date.today().isoformat(),
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.utcnow().isoformat()
         }).eq('id', po_id).execute()
-        
-        return True, "PO received and stock updated"
+
+        return True, f"PO #{po_number} received and stock updated"
     except Exception as e:
         print(f"Error receiving PO: {e}")
         return False, str(e)
@@ -710,6 +736,7 @@ def receive_purchase_order(po_id):
 def delete_purchase_order(po_id):
     """Delete PO (only if not Received)"""
     try:
+        supabase = get_client()
         po = get_po_by_id(po_id)
         if not po:
             return False
@@ -725,6 +752,7 @@ def delete_purchase_order(po_id):
 def get_pending_pos():
     """Get POs that are not yet received or cancelled"""
     try:
+        supabase = get_client()
         active_statuses = ['Draft', 'Sent to Vendor', 'Confirmed', 'In Production', 'Shipped']
         result = supabase.table('purchase_orders').select('*').in_('status', active_statuses).order('expected_date').execute()
         return pd.DataFrame(result.data) if result.data else pd.DataFrame()
@@ -740,13 +768,13 @@ def get_po_alerts():
         pending = get_pending_pos()
         if pending.empty:
             return alerts
-        
+
         today = date.today()
-        
+
         for _, po in pending.iterrows():
             po_num = po.get('po_number', 'N/A')
             status = po.get('status', '')
-            
+
             # Alert 1: Expected date passed/near
             expected = po.get('expected_date')
             if expected:
@@ -756,15 +784,15 @@ def get_po_alerts():
                     else:
                         exp_date = expected
                     days_left = (exp_date - today).days
-                    
+
                     if days_left < 0:
                         alerts.append(('danger', f'📋 **PO #{po_num}** is **{abs(days_left)}d overdue** (expected: {exp_date.strftime("%d %b")}) — Status: {status}'))
                     elif days_left <= 2:
                         alerts.append(('warning', f'📋 **PO #{po_num}** expected in **{days_left}d** — Status: {status}'))
                 except Exception:
                     pass
-            
-            # Alert 2: Stuck in status > 7 days
+
+            # Alert 2: Stuck in Draft/Sent for > 7 days
             try:
                 po_date_val = po.get('po_date')
                 if po_date_val:
@@ -773,16 +801,13 @@ def get_po_alerts():
                     else:
                         pd_date = po_date_val
                     days_old = (today - pd_date).days
-                    
+
                     if days_old > 7 and status in ('Draft', 'Sent to Vendor'):
                         alerts.append(('warning', f'📋 **PO #{po_num}** stuck in "{status}" for **{days_old}d** — follow up with vendor!'))
             except Exception:
                 pass
-        
+
         return alerts
     except Exception as e:
         print(f"Error generating PO alerts: {e}")
         return alerts
-
-
-PO_STATUSES = ['Draft', 'Sent to Vendor', 'Confirmed', 'In Production', 'Shipped', 'Received', 'Cancell
