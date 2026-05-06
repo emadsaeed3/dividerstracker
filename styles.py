@@ -273,7 +273,7 @@ def load_css():
         box-shadow: 0 6px 20px rgba(155, 89, 182, 0.5);
     }}
     
-    /* ===== INPUTS ===== */
+        /* ===== INPUTS ===== */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stTextArea > div > div > textarea,
@@ -293,6 +293,48 @@ def load_css():
         box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15) !important;
     }}
     
+    /* Placeholder text */
+    .stTextInput input::placeholder,
+    .stTextArea textarea::placeholder,
+    .stNumberInput input::placeholder {{
+        color: {c['text_muted']} !important;
+        opacity: 0.7 !important;
+    }}
+    
+    /* Text area specific */
+    .stTextArea > div > div {{
+        background: {c['input_bg']} !important;
+    }}
+    .stTextArea textarea {{
+        background: {c['input_bg']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Number input +/- buttons */
+    .stNumberInput button {{
+        background: {c['bg_tertiary']} !important;
+        color: {c['text_primary']} !important;
+        border-color: {c['input_border']} !important;
+    }}
+    .stNumberInput button:hover {{
+        background: {c['border_color']} !important;
+    }}
+    .stNumberInput button svg {{
+        fill: {c['text_primary']} !important;
+    }}
+    
+    /* Date Input wrapper */
+    .stDateInput > div > div {{
+        background: {c['input_bg']} !important;
+        border: 1.5px solid {c['input_border']} !important;
+        border-radius: 10px !important;
+    }}
+    .stDateInput input {{
+        background: {c['input_bg']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Selectbox */
     .stSelectbox > div > div {{
         background: {c['input_bg']} !important;
         border-radius: 10px !important;
@@ -307,13 +349,64 @@ def load_css():
         color: {c['text_primary']} !important;
     }}
     
+    /* Selectbox dropdown menu (when opened) */
+    [data-baseweb="popover"],
+    [data-baseweb="menu"],
+    [role="listbox"] {{
+        background: {c['bg_secondary']} !important;
+        color: {c['text_primary']} !important;
+        border: 1px solid {c['border_color']} !important;
+    }}
+    [role="option"],
+    [data-baseweb="menu"] li,
+    [data-baseweb="menu"] [role="option"] {{
+        background: {c['bg_secondary']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    [role="option"]:hover,
+    [data-baseweb="menu"] li:hover {{
+        background: {c['bg_tertiary']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    [aria-selected="true"][role="option"] {{
+        background: rgba(52, 152, 219, 0.2) !important;
+        color: {c['text_primary']} !important;
+    }}
+    
     /* Date picker calendar */
     [data-baseweb="calendar"] {{
         background: {c['bg_secondary']} !important;
         color: {c['text_primary']} !important;
+        border: 1px solid {c['border_color']} !important;
     }}
-    [data-baseweb="popover"] {{
+    [data-baseweb="calendar"] * {{
+        color: {c['text_primary']} !important;
+    }}
+    [data-baseweb="calendar"] button {{
+        background: transparent !important;
+        color: {c['text_primary']} !important;
+    }}
+    [data-baseweb="calendar"] button:hover {{
+        background: {c['bg_tertiary']} !important;
+    }}
+    [data-baseweb="calendar"] [aria-selected="true"] {{
+        background: #3498db !important;
+        color: white !important;
+    }}
+    [data-baseweb="popover"] [data-baseweb="calendar"] {{
         background: {c['bg_secondary']} !important;
+    }}
+    
+    /* Calendar header (month/year) */
+    [data-baseweb="calendar"] [data-baseweb="calendar-header"] {{
+        background: {c['bg_secondary']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Date input popup */
+    div[data-baseweb="popover"] > div {{
+        background: {c['bg_secondary']} !important;
+        color: {c['text_primary']} !important;
     }}
     
     /* Checkboxes */
@@ -323,9 +416,39 @@ def load_css():
     .stCheckbox label span {{
         color: {c['text_primary']} !important;
     }}
+    .stCheckbox [data-baseweb="checkbox"] > div {{
+        background: {c['input_bg']} !important;
+        border-color: {c['input_border']} !important;
+    }}
     
     /* Radio */
     .stRadio label {{
+        color: {c['text_primary']} !important;
+    }}
+    .stRadio label span {{
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Form labels */
+    label[data-testid="stWidgetLabel"],
+    label[data-testid="stWidgetLabel"] p,
+    label[data-testid="stWidgetLabel"] div {{
+        color: {c['text_primary']} !important;
+    }}
+    
+    /* Slider (if used) */
+    .stSlider [data-baseweb="slider"] {{
+        background: {c['input_bg']} !important;
+    }}
+    
+    /* File uploader */
+    [data-testid="stFileUploader"] section {{
+        background: {c['input_bg']} !important;
+        border: 2px dashed {c['input_border']} !important;
+        color: {c['text_primary']} !important;
+    }}
+    [data-testid="stFileUploader"] section button {{
+        background: {c['bg_tertiary']} !important;
         color: {c['text_primary']} !important;
     }}
     
