@@ -4,7 +4,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date
+from datetime import date, datetime
 from database_it import (
     IT_EQUIPMENT_TYPES, IT_ICONS,
     get_it_stock_dict, get_rdcs, get_it_shipments,
@@ -20,8 +20,27 @@ from components import (
 from styles import get_plotly_theme
 
 
+def _to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except Exception:
+            try:
+                return pd.to_datetime(value).date()
+            except Exception:
+                return None
+    return None
+
+
 def calculate_launch_alerts():
-    """Calculate alerts for upcoming RDC launches"""
     alerts = []
     upcoming = get_upcoming_rdc_launches(days_ahead=4)
 
@@ -32,31 +51,59 @@ def calculate_launch_alerts():
         days_left = rdc['days_left']
         name = rdc['name']
         location = rdc.get('location') or 'N/A'
-        transport_ready = bool(rdc.get('transportation_ready', False))
 
         if days_left == 0:
-            alerts.append(('danger', f'🚀 **LAUNCHING TODAY:** {name} ({location}) — Ensure delivery!'))
+            alerts.append(('danger', f'🚀 **LAUNCHING TODAY:** {name} ({location})'))
         elif days_left == 1:
             alerts.append(('danger', f'🚨 **Launch Tomorrow:** {name} ({location}) — Ship NOW!'))
         elif days_left == 2:
             alerts.append(('warning', f'⚠️ **Launch in 2 days:** {name} ({location}) — Schedule shipment today!'))
-            if not transport_ready:
-                alerts.append(('warning', f'🚚 **Transportation NOT ready** for {name} — Arrange today!'))
         elif days_left <= 4:
-            alerts.append(('info', f'📅 **Launch in {days_left} days:** {name} ({location}) — Prepare shipment soon.'))
-            if not transport_ready and days_left <= 3:
-                alerts.append(('warning', f'🚚 **Transportation not ready** for {name} — Arrange within 24h'))
+            alerts.append(('info', f'📅 **Launch in {days_left} days:** {name} ({location})'))
+
+    return alerts
+
+
+def calculate_transport_alerts(shipments_df):
+    """Alerts for IT shipments without transportation"""
+    alerts = []
+    today = date.today()
+
+    if shipments_df.empty:
+        return alerts
+
+    for _, ship in shipments_df.iterrows():
+        status = ship.get('delivery_status') or 'Pending'
+        if status not in ('Pending', 'In Transit'):
+            continue
+
+        if bool(ship.get('transportation_ready', False)):
+            continue
+
+        scheduled = _to_date(ship.get('scheduled_date'))
+        if not scheduled:
+            continue
+
+        days = (scheduled - today).days
+        rdc_name = ship.get('rdc_name', 'Unknown')
+        ship_id = ship.get('id')
+
+        if days < 0:
+            alerts.append(('danger', f'🚛 **Transport NOT arranged** for IT shipment #{ship_id} to {rdc_name} (was due {abs(days)}d ago)'))
+        elif days <= 1:
+            alerts.append(('danger', f'🚛 **Transport NOT ready** for IT shipment #{ship_id} to {rdc_name} — delivers tomorrow!'))
+        elif days <= 2:
+            alerts.append(('warning', f'🚛 **Arrange transport** for IT shipment #{ship_id} to {rdc_name} ({days}d)'))
 
     return alerts
 
 
 def calculate_stock_alerts(stocks, requirements, threshold):
-    """Calculate stock shortage alerts"""
     alerts = []
     for item in IT_EQUIPMENT_TYPES:
         stock = stocks.get(item, 0)
         req = requirements.get(item, 0)
-        
+
         if req > 0 and stock < req:
             shortage = req - stock
             alerts.append((
@@ -72,9 +119,7 @@ def calculate_stock_alerts(stocks, requirements, threshold):
 
 
 def render_bar_chart_it(stocks, requirements, shipped):
-    """Bar chart: Stock vs Required vs Shipped for all IT items"""
     items = IT_EQUIPMENT_TYPES
-    # Shorten labels for display
     short_labels = [
         item.replace('Wireless Scanner - ', 'WS-')
             .replace('Charger Wireless Scanner - ', 'Charger ')
@@ -82,30 +127,26 @@ def render_bar_chart_it(stocks, requirements, shipped):
             .replace('Zebra ZD621', 'Zebra')
         for item in items
     ]
-    
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        name='Stock',
-        x=short_labels,
+        name='Stock', x=short_labels,
         y=[stocks.get(t, 0) for t in items],
         marker_color='#3498db'
     ))
     fig.add_trace(go.Bar(
-        name='Required',
-        x=short_labels,
+        name='Required', x=short_labels,
         y=[requirements.get(t, 0) for t in items],
         marker_color='#f39c12'
     ))
     fig.add_trace(go.Bar(
-        name='Shipped',
-        x=short_labels,
+        name='Shipped', x=short_labels,
         y=[shipped.get(t, 0) for t in items],
         marker_color='#27ae60'
     ))
-    
+
     fig.update_layout(
-        barmode='group',
-        height=420,
+        barmode='group', height=420,
         title=dict(text='<b>📊 Equipment Stock Overview</b>', font=dict(size=16)),
         margin=dict(t=60, b=80, l=40, r=20),
         xaxis=dict(tickangle=-30),
@@ -115,29 +156,25 @@ def render_bar_chart_it(stocks, requirements, shipped):
 
 
 def render_status_pie(shipments_df):
-    """Pie chart for shipment statuses"""
     if shipments_df.empty or 'delivery_status' not in shipments_df.columns:
         st.info("📊 No shipments yet.")
         return
-    
+
     counts = shipments_df['delivery_status'].value_counts()
     if counts.empty:
         st.info("📊 No shipments yet.")
         return
-    
+
     color_map = {
-        'Pending': '#f39c12',
-        'In Transit': '#3498db',
-        'Delivered': '#27ae60',
-        'Delayed': '#e74c3c'
+        'Pending': '#f39c12', 'In Transit': '#3498db',
+        'Delivered': '#27ae60', 'Delayed': '#e74c3c'
     }
     colors = [color_map.get(s, '#95a5a6') for s in counts.index]
-    
+
     fig = go.Figure(data=[go.Pie(
         labels=counts.index.tolist(),
         values=counts.values.tolist(),
-        hole=0.55,
-        marker=dict(colors=colors)
+        hole=0.55, marker=dict(colors=colors)
     )])
     fig.update_layout(
         height=420,
@@ -149,25 +186,24 @@ def render_status_pie(shipments_df):
 
 
 def render_rdc_progress_table(rdcs_df):
-    """Table showing progress per RDC"""
     if rdcs_df.empty:
         return
-    
+
     rows = []
     for _, rdc in rdcs_df.iterrows():
         requirements = get_rdc_requirements_dict(rdc['id'])
         shipped = get_shipped_totals_per_rdc(rdc['id'])
-        
+
         total_req = sum(requirements.values())
         total_ship = sum(shipped.values())
         total_pending = max(0, total_req - total_ship)
         pct = (total_ship / total_req * 100) if total_req > 0 else 0
-        
+
         launch = rdc.get('launch_date')
         launch_str = str(launch) if launch else '—'
-        
+
         status_icon = '✅' if pct >= 100 else ('🟡' if pct > 0 else '🔴')
-        
+
         rows.append({
             'Status': status_icon,
             'RDC': rdc['name'],
@@ -178,13 +214,12 @@ def render_rdc_progress_table(rdcs_df):
             'Pending': total_pending,
             'Progress': f"{pct:.0f}%"
         })
-    
+
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def render():
-    """Render the IT Dashboard"""
     st.markdown("# 📊 4M IT Equipment Dashboard")
     st.caption("Overview of all IT equipment, RDCs, and shipments")
 
@@ -194,7 +229,6 @@ def render():
     rdcs_df = get_rdcs()
     shipments_df = get_it_shipments()
 
-    # Calculate shipped totals
     all_items = get_all_shipment_items()
     shipped_totals = {t: 0 for t in IT_EQUIPMENT_TYPES}
     if not all_items.empty:
@@ -203,8 +237,9 @@ def render():
 
     # Alerts
     launch_alerts = calculate_launch_alerts()
+    transport_alerts = calculate_transport_alerts(shipments_df)
     stock_alerts = calculate_stock_alerts(stocks, requirements, threshold)
-    all_alerts = launch_alerts + stock_alerts
+    all_alerts = launch_alerts + transport_alerts + stock_alerts
 
     if all_alerts:
         render_section_title("🔔 Alerts")
@@ -216,15 +251,15 @@ def render():
             else:
                 st.info(msg)
 
-    # Overview metrics
+    # Overview
     render_section_title("📌 Overview")
-    
+
     pending_ships = 0
     if not shipments_df.empty and 'delivery_status' in shipments_df.columns:
         pending_ships = len(shipments_df[shipments_df['delivery_status'].isin(['Pending', 'In Transit'])])
-    
+
     upcoming = get_upcoming_rdc_launches(days_ahead=4)
-    
+
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         render_stat_card("Total RDCs", len(rdcs_df), "card-stores", "bi-building")
@@ -235,12 +270,12 @@ def render():
     with c4:
         render_stat_card("Upcoming Launches", len(upcoming), "card-30d", "bi-rocket-takeoff")
 
-    # Totals row
+    # Totals
     total_stock = sum(stocks.values())
     total_required = sum(requirements.values())
     total_shipped = sum(shipped_totals.values())
     total_pending = max(0, total_required - total_shipped)
-    
+
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         render_stat_card("Total Stock", total_stock, "card-30d", "bi-box-seam-fill")
@@ -251,15 +286,13 @@ def render():
     with c4:
         render_stat_card("Total Pending", total_pending, "card-60d", "bi-hourglass-split")
 
-    # Equipment Stock Cards
+    # Equipment Stock
     render_section_title("💻 IT Equipment Stock")
     cols = st.columns(3)
     for idx, item in enumerate(IT_EQUIPMENT_TYPES):
         with cols[idx % 3]:
             render_it_stock_card(
-                item,
-                stocks.get(item, 0),
-                threshold,
+                item, stocks.get(item, 0), threshold,
                 icon=IT_ICONS.get(item, 'bi-cpu')
             )
 
@@ -271,7 +304,7 @@ def render():
     with c2:
         render_status_pie(shipments_df)
 
-    # RDC Progress Table
+    # RDC Progress
     if not rdcs_df.empty:
         render_section_title("🏢 RDCs Progress")
         render_rdc_progress_table(rdcs_df)
@@ -279,9 +312,6 @@ def render():
     # Upcoming launches details
     if not upcoming.empty:
         render_section_title("🚀 Upcoming Launches")
-        upcoming_display = upcoming[['name', 'location', 'launch_date', 'days_left', 'transportation_ready']].copy()
-        upcoming_display.columns = ['RDC', 'Location', 'Launch Date', 'Days Left', 'Transport Ready']
-        upcoming_display['Transport Ready'] = upcoming_display['Transport Ready'].apply(
-            lambda x: '✅' if x else '❌'
-        )
+        upcoming_display = upcoming[['name', 'location', 'launch_date', 'days_left']].copy()
+        upcoming_display.columns = ['RDC', 'Location', 'Launch Date', 'Days Left']
         st.dataframe(upcoming_display, use_container_width=True, hide_index=True)
