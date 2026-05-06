@@ -2,7 +2,8 @@
 Notifications System
 Generates live notifications from the current data
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+import pandas as pd
 
 
 CRITICAL = 'critical'
@@ -33,6 +34,99 @@ SEVERITY_CONFIG = {
         'priority': 3,
     },
 }
+
+
+# ==================== PURCHASE ORDER NOTIFICATIONS ====================
+
+def get_po_notifications():
+    """Generate notifications for Purchase Orders"""
+    from database import get_pending_pos
+
+    notifications = []
+    today = date.today()
+
+    try:
+        pending = get_pending_pos()
+        if pending.empty:
+            return notifications
+
+        for _, po in pending.iterrows():
+            po_num = po.get('po_number', 'N/A')
+            status = po.get('status', '')
+            vendor = po.get('vendor_name', '') or 'Unknown'
+
+            # Total qty
+            q30 = int(po.get('qty_30d', 0) or 0)
+            q40 = int(po.get('qty_40d', 0) or 0)
+            q60 = int(po.get('qty_60d', 0) or 0)
+            total_qty = q30 + q40 + q60
+
+            # Alert 1: Expected delivery overdue/near
+            expected = po.get('expected_date')
+            if expected:
+                try:
+                    if isinstance(expected, str):
+                        exp_date = date.fromisoformat(expected[:10])
+                    else:
+                        exp_date = expected
+                    days_left = (exp_date - today).days
+
+                    if days_left < 0:
+                        notifications.append({
+                            'severity': CRITICAL,
+                            'title': 'PO #' + str(po_num) + ' Overdue',
+                            'message': 'PO from ' + vendor + ' (' + str(total_qty) + ' units) was expected ' + str(abs(days_left)) + ' days ago. Status: ' + status,
+                            'section': 'dividers',
+                            'goto_page': 'Vendor Stock',
+                            'category': 'PO',
+                        })
+                    elif days_left == 0:
+                        notifications.append({
+                            'severity': CRITICAL,
+                            'title': 'PO #' + str(po_num) + ' Due TODAY',
+                            'message': 'PO from ' + vendor + ' (' + str(total_qty) + ' units) is expected today. Status: ' + status,
+                            'section': 'dividers',
+                            'goto_page': 'Vendor Stock',
+                            'category': 'PO',
+                        })
+                    elif days_left <= 2:
+                        notifications.append({
+                            'severity': WARNING,
+                            'title': 'PO #' + str(po_num) + ' Due Soon',
+                            'message': 'PO from ' + vendor + ' (' + str(total_qty) + ' units) expected in ' + str(days_left) + ' days. Status: ' + status,
+                            'section': 'dividers',
+                            'goto_page': 'Vendor Stock',
+                            'category': 'PO',
+                        })
+                except Exception:
+                    pass
+
+            # Alert 2: Stuck in Draft/Sent for > 7 days
+            try:
+                po_date_val = po.get('po_date')
+                if po_date_val:
+                    if isinstance(po_date_val, str):
+                        pd_date = date.fromisoformat(po_date_val[:10])
+                    else:
+                        pd_date = po_date_val
+                    days_old = (today - pd_date).days
+
+                    if days_old > 7 and status in ('Draft', 'Sent to Vendor'):
+                        notifications.append({
+                            'severity': WARNING,
+                            'title': 'PO #' + str(po_num) + ' Stuck',
+                            'message': 'Stuck in "' + status + '" for ' + str(days_old) + ' days. Follow up with ' + vendor + '!',
+                            'section': 'dividers',
+                            'goto_page': 'Vendor Stock',
+                            'category': 'PO',
+                        })
+            except Exception:
+                pass
+
+    except Exception as e:
+        print('Error generating PO notifications: ' + str(e))
+
+    return notifications
 
 
 # ==================== DIVIDERS NOTIFICATIONS ====================
@@ -505,6 +599,7 @@ def get_all_notifications():
 
     all_notifs = []
 
+    # Dividers notifications
     try:
         stocks = get_stocks_dict()
         threshold = get_threshold()
@@ -518,9 +613,16 @@ def get_all_notifications():
             stocks, threshold, stores_df, shipments_df,
             magnet_stock, magnet_status, action_items_df
         ))
-    except Exception:
-        pass
+    except Exception as e:
+        print('Error in dividers notifications: ' + str(e))
 
+    # PO notifications (added to dividers section)
+    try:
+        all_notifs.extend(get_po_notifications())
+    except Exception as e:
+        print('Error in PO notifications: ' + str(e))
+
+    # IT notifications
     try:
         it_stocks = get_it_stock_dict()
         threshold = get_threshold()
@@ -538,8 +640,8 @@ def get_all_notifications():
             it_stocks, threshold, rdcs_df, it_shipments_df,
             it_requirements, it_shipped_totals
         ))
-    except Exception:
-        pass
+    except Exception as e:
+        print('Error in IT notifications: ' + str(e))
 
     all_notifs.sort(key=lambda n: SEVERITY_CONFIG[n['severity']]['priority'])
 
