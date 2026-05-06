@@ -88,7 +88,7 @@ else:
             shipments.render()
         elif "Action Items" in page:
             action_items.render()
-        elif "Reports" in page or "Progress Report" in page:
+        elif "Reports" in page:
             progress_report.render()
 
     elif section == 'it':
