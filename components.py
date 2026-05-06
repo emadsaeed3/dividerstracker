@@ -80,7 +80,6 @@ DIVIDERS_PAGES = [
     "🧲  Magnets",
     "🚚  Shipments",
     "📝  Action Items",
-    "📄  Progress Report",
     "📈  Reports"
 ]
 
