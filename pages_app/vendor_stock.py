@@ -8,8 +8,8 @@ import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
 from database import (
-    get_stocks_dict, get_stock, update_stock, get_threshold,
-    get_stock_movements, log_stock_movement, clear_stock_history,
+    get_stocks_dict, get_stocks, update_stock, get_threshold,
+    get_stock_history, clear_stock_history,
     get_purchase_orders, get_po_by_id, add_purchase_order,
     update_purchase_order, receive_purchase_order, delete_purchase_order,
     get_pending_pos, PO_STATUSES
@@ -49,7 +49,7 @@ def render_current_stock_tab():
     render_section_title("➕ Add / Remove Stock Manually")
     st.caption("Use this for manual adjustments. For PO receipts, use the Purchase Orders tab.")
 
-    with st.form("manual_stock_form"):
+    with st.form("manual_stock_form", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         dtype = c1.selectbox("Divider Type", ['30D', '40D', '60D'])
         movement = c2.selectbox("Movement", ['IN (Add)', 'OUT (Remove)'])
@@ -60,23 +60,23 @@ def render_current_stock_tab():
         submit = st.form_submit_button("💾 Apply", use_container_width=True, type="primary")
 
         if submit:
-            current = get_stock(dtype)
+            current = stocks.get(dtype, 0)
             if movement.startswith('IN'):
                 new_qty = current + qty
-                mov_type = 'IN'
+                note_text = notes or 'Manual addition'
             else:
                 if qty > current:
                     st.error(f"❌ Cannot remove {qty} - only {current} in stock!")
                     return
                 new_qty = current - qty
-                mov_type = 'OUT'
+                note_text = notes or 'Manual removal'
 
-            if update_stock(dtype, new_qty):
-                log_stock_movement(dtype, mov_type, qty, notes or 'Manual adjustment')
+            try:
+                update_stock(dtype, new_qty, note_text)
                 st.success(f"✅ Stock updated! New {dtype} stock: {new_qty}")
                 st.rerun()
-            else:
-                st.error("❌ Failed to update stock")
+            except Exception as e:
+                st.error(f"❌ Failed to update stock: {e}")
 
 
 # ==================== TAB 2: PURCHASE ORDERS ====================
@@ -95,6 +95,17 @@ def render_po_status_badge(status):
     return f'<span style="background:{color};color:white;padding:4px 10px;border-radius:12px;font-size:0.78rem;font-weight:600;">{status}</span>'
 
 
+def fmt_date(d):
+    if not d:
+        return '—'
+    try:
+        if isinstance(d, str):
+            return date.fromisoformat(d[:10]).strftime('%d %b %Y')
+        return d.strftime('%d %b %Y') if hasattr(d, 'strftime') else str(d)
+    except Exception:
+        return str(d)
+
+
 def render_po_card(po):
     po_id = po['id']
     po_num = po.get('po_number', 'N/A')
@@ -105,16 +116,6 @@ def render_po_card(po):
     po_date_val = po.get('po_date')
     expected = po.get('expected_date')
     received = po.get('received_date')
-
-    def fmt_date(d):
-        if not d:
-            return '—'
-        try:
-            if isinstance(d, str):
-                return date.fromisoformat(d[:10]).strftime('%d %b %Y')
-            return d.strftime('%d %b %Y') if hasattr(d, 'strftime') else str(d)
-        except Exception:
-            return str(d)
 
     q30 = int(po.get('qty_30d', 0) or 0)
     q40 = int(po.get('qty_40d', 0) or 0)
@@ -332,13 +333,13 @@ def render_purchase_orders_tab():
         render_stat_card("Total POs", len(all_pos), "card-stores", "bi-file-earmark-text")
     with c2:
         render_stat_card("Pending", len(pending), "card-40d", "bi-hourglass-split")
-    
+
     received_count = 0
     cancelled_count = 0
     if not all_pos.empty and 'status' in all_pos.columns:
         received_count = len(all_pos[all_pos['status'] == 'Received'])
         cancelled_count = len(all_pos[all_pos['status'] == 'Cancelled'])
-    
+
     with c3:
         render_stat_card("Received", received_count, "card-shipments", "bi-check-circle")
     with c4:
@@ -399,7 +400,7 @@ def render_history_tab():
             st.rerun()
 
     if st.session_state.get('confirm_clear_history'):
-        st.warning("⚠️ This will delete ALL stock movement history. This cannot be undone!")
+        st.warning("⚠️ This will delete ALL stock history. This cannot be undone!")
         cc1, cc2 = st.columns(2)
         if cc1.button("✅ Yes, clear all", use_container_width=True, type="primary"):
             if clear_stock_history():
@@ -412,27 +413,28 @@ def render_history_tab():
             st.session_state.pop('confirm_clear_history', None)
             st.rerun()
 
-    movements = get_stock_movements()
+    history = get_stock_history(limit=100)
 
-    if movements.empty:
-        st.info("📭 No stock movements yet")
+    if history.empty:
+        st.info("📭 No stock history yet")
         return
 
     # Format display
-    display = movements.copy()
-    if 'movement_date' in display.columns:
-        display['movement_date'] = pd.to_datetime(display['movement_date']).dt.strftime('%d %b %Y')
-    
-    display = display.rename(columns={
-        'movement_date': 'Date',
-        'divider_type': 'Type',
-        'movement_type': 'Movement',
-        'quantity': 'Qty',
-        'notes': 'Notes'
-    })
+    display = history.copy()
+    if 'date' in display.columns:
+        display['date'] = pd.to_datetime(display['date']).dt.strftime('%d %b %Y %H:%M')
 
-    # Reorder columns
-    cols_order = ['Date', 'Type', 'Movement', 'Qty', 'Notes']
+    rename_map = {
+        'date': 'Date',
+        'divider_type': 'Type',
+        'old_qty': 'Before',
+        'new_qty': 'After',
+        'change': 'Change',
+        'note': 'Notes'
+    }
+    display = display.rename(columns={k: v for k, v in rename_map.items() if k in display.columns})
+
+    cols_order = ['Date', 'Type', 'Before', 'After', 'Change', 'Notes']
     available_cols = [c for c in cols_order if c in display.columns]
     display = display[available_cols]
 
