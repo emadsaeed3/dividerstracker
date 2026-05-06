@@ -1,24 +1,25 @@
 """
-PDF Report Generator
-Generates professional progress reports
+Executive Progress Report PDF Generator
+Designed for leadership review - clean, focused, actionable
 """
 import os
 from io import BytesIO
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image,
+    PageBreak, KeepTogether
 )
 
 
 # ==================== COLORS ====================
 
-DARK_HEADER = colors.HexColor('#2C3E50')
-LIGHT_BG = colors.HexColor('#ECF0F1')
+DARK_HEADER = colors.HexColor('#1A2332')
+ACCENT_PRIMARY = colors.HexColor('#FF9900')  # Amazon Orange
 ACCENT_BLUE = colors.HexColor('#3498DB')
 ACCENT_ORANGE = colors.HexColor('#E67E22')
 ACCENT_PURPLE = colors.HexColor('#9B59B6')
@@ -26,45 +27,72 @@ ACCENT_GREEN = colors.HexColor('#27AE60')
 ACCENT_RED = colors.HexColor('#E74C3C')
 ACCENT_YELLOW = colors.HexColor('#F39C12')
 
-HIGHLIGHT_BG = colors.HexColor('#2C3E50')
+LIGHT_BG = colors.HexColor('#F4F6F8')
+CARD_BG = colors.HexColor('#FFFFFF')
+TEXT_DARK = colors.HexColor('#1A2332')
+TEXT_MUTED = colors.HexColor('#6C7A89')
+DIVIDER_LIGHT = colors.HexColor('#E1E8ED')
+
+HIGHLIGHT_BG = colors.HexColor('#1A2332')
 LOWLIGHT_BG = colors.HexColor('#34495E')
-TEXT_DARK = colors.HexColor('#2C3E50')
-TEXT_GRAY = colors.HexColor('#7F8C8D')
-DIVIDER_GRAY = colors.HexColor('#BDC3C7')
 
 
 COLOR_HEX = {
-    'DARK_HEADER': '#2C3E50',
+    'DARK_HEADER': '#1A2332',
+    'ACCENT_PRIMARY': '#FF9900',
     'ACCENT_BLUE': '#3498DB',
     'ACCENT_ORANGE': '#E67E22',
     'ACCENT_PURPLE': '#9B59B6',
     'ACCENT_GREEN': '#27AE60',
     'ACCENT_RED': '#E74C3C',
     'ACCENT_YELLOW': '#F39C12',
-    'TEXT_DARK': '#2C3E50',
-    'TEXT_GRAY': '#7F8C8D',
+    'TEXT_DARK': '#1A2332',
+    'TEXT_MUTED': '#6C7A89',
+    'WHITE': '#FFFFFF',
 }
 
+
+# ==================== HELPERS ====================
 
 def get_styles():
     styles = getSampleStyleSheet()
 
     styles.add(ParagraphStyle(
-        name='ReportTitle', fontName='Helvetica-Bold', fontSize=16,
-        textColor=colors.white, alignment=TA_LEFT, spaceAfter=4,
+        name='ReportTitle', fontName='Helvetica-Bold', fontSize=18,
+        textColor=colors.white, alignment=TA_LEFT, spaceAfter=2,
     ))
 
     styles.add(ParagraphStyle(
-        name='ReportSubtitle', fontName='Helvetica', fontSize=9,
-        textColor=colors.white, alignment=TA_LEFT,
+        name='ReportSubtitle', fontName='Helvetica', fontSize=10,
+        textColor=colors.HexColor('#BDC3C7'), alignment=TA_LEFT,
     ))
 
     styles.add(ParagraphStyle(
-        name='BodyTextCustom', fontName='Helvetica', fontSize=9,
-        textColor=TEXT_DARK, alignment=TA_JUSTIFY, leading=12,
+        name='BodyTextCustom', fontName='Helvetica', fontSize=10,
+        textColor=TEXT_DARK, alignment=TA_JUSTIFY, leading=14,
+    ))
+
+    styles.add(ParagraphStyle(
+        name='SectionTitle', fontName='Helvetica-Bold', fontSize=13,
+        textColor=TEXT_DARK, alignment=TA_LEFT, spaceAfter=4,
     ))
 
     return styles
+
+
+def _to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except Exception:
+            return None
+    return None
 
 
 # ==================== HEADER ====================
@@ -75,57 +103,72 @@ def build_header(week_number, report_date, next_update, styles):
 
     if os.path.exists(logo_path):
         try:
-            logo_element = Image(logo_path, width=3 * cm, height=1 * cm, kind='proportional')
+            logo_element = Image(logo_path, width=3.5 * cm, height=1.2 * cm, kind='proportional')
         except Exception:
             logo_element = Paragraph('<b>amazon now</b>', styles['ReportTitle'])
     else:
         logo_element = Paragraph('<b>amazon now</b>', styles['ReportTitle'])
 
-    title_text = 'LAUNCH TEAM TRACKER - PROGRESS REPORT'
-    report_date_str = report_date.strftime('%d %b %Y') if report_date else '—'
-    next_update_str = next_update.strftime('%d %b %Y') if next_update else '—'
-    subtitle = 'Week ' + str(week_number) + ' | Report Date: ' + report_date_str + ' | Next Update: ' + next_update_str
+    title_text = 'LAUNCH TEAM PROGRESS REPORT'
+    report_date_str = report_date.strftime('%d %B %Y') if report_date else '—'
+    next_update_str = next_update.strftime('%d %B %Y') if next_update else '—'
 
     title_para = Paragraph('<b>' + title_text + '</b>', styles['ReportTitle'])
-    subtitle_para = Paragraph(subtitle, styles['ReportSubtitle'])
+    
+    subtitle = (
+        '<para fontSize="9" fontName="Helvetica" textColor="#BDC3C7">'
+        '<b>WEEK ' + str(week_number) + '</b>  •  '
+        'Report Date: ' + report_date_str + '  •  '
+        'Next Update: ' + next_update_str +
+        '</para>'
+    )
+    subtitle_para = Paragraph(subtitle, styles['Normal'])
 
     header_content = [[
-        [title_para, Spacer(1, 3), subtitle_para],
+        [title_para, Spacer(1, 4), subtitle_para],
         logo_element
     ]]
 
-    header_table = Table(header_content, colWidths=[13 * cm, 4 * cm])
+    header_table = Table(header_content, colWidths=[13.5 * cm, 3.5 * cm])
     header_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), DARK_HEADER),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 14),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 14),
-        ('TOPPADDING', (0, 0), (-1, -1), 14),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+        ('LEFTPADDING', (0, 0), (-1, -1), 18),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 18),
+        ('TOPPADDING', (0, 0), (-1, -1), 16),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 16),
     ]))
 
-    return header_table
+    # Orange accent bar below header
+    accent_bar = Table([['']], colWidths=[17 * cm], rowHeights=[0.15 * cm])
+    accent_bar.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), ACCENT_PRIMARY),
+    ]))
+
+    return [header_table, accent_bar]
 
 
 # ==================== SECTION HEADER ====================
 
-def build_section_header(title):
+def build_section_header(title, icon=''):
     elements = []
+    
+    title_text = (icon + ' ' if icon else '') + title
     para = Paragraph(
-        '<para fontSize="12" fontName="Helvetica-Bold" textColor="' + COLOR_HEX['TEXT_DARK'] + '">'
-        '<b>' + title + '</b></para>',
+        '<para fontSize="13" fontName="Helvetica-Bold" textColor="' + COLOR_HEX['TEXT_DARK'] + '">'
+        '<b>' + title_text + '</b></para>',
         getSampleStyleSheet()['Normal']
     )
     elements.append(para)
 
-    line_table = Table([['']], colWidths=[17 * cm], rowHeights=[1])
+    line_table = Table([['']], colWidths=[17 * cm], rowHeights=[1.5])
     line_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), DIVIDER_GRAY),
+        ('BACKGROUND', (0, 0), (-1, -1), ACCENT_PRIMARY),
     ]))
-    elements.append(Spacer(1, 2))
+    elements.append(Spacer(1, 3))
     elements.append(line_table)
-    elements.append(Spacer(1, 8))
+    elements.append(Spacer(1, 10))
 
     return elements
 
@@ -134,24 +177,34 @@ def build_section_header(title):
 
 def build_executive_summary(text, styles):
     elements = []
-    elements.extend(build_section_header('Executive Summary'))
+    elements.extend(build_section_header('Executive Summary', '📋'))
 
     if text and text.strip():
         para = Paragraph(text, styles['BodyTextCustom'])
-        elements.append(para)
+        # Wrap in box
+        box = Table([[para]], colWidths=[17 * cm])
+        box.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), LIGHT_BG),
+            ('LEFTPADDING', (0, 0), (-1, -1), 16),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 16),
+            ('TOPPADDING', (0, 0), (-1, -1), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+            ('LINEABOVE', (0, 0), (-1, 0), 3, ACCENT_PRIMARY),
+        ]))
+        elements.append(box)
     else:
         elements.append(Paragraph(
             '<i>No summary provided.</i>',
             styles['BodyTextCustom']
         ))
 
-    elements.append(Spacer(1, 12))
+    elements.append(Spacer(1, 16))
     return elements
 
 
 # ==================== HIGHLIGHTS / LOWLIGHTS ====================
 
-def build_highlights_box(bullets_text, bg_color):
+def build_highlights_box(bullets_text, bg_color, accent_color):
     if not bullets_text or not bullets_text.strip():
         bullets_text = 'None reported.'
 
@@ -159,23 +212,27 @@ def build_highlights_box(bullets_text, bg_color):
 
     bullet_html = ''
     for line in lines:
-        clean_line = line.lstrip('•-*').strip()
+        clean_line = line.lstrip('•-*✓✗⚠✅❌').strip()
         if clean_line:
             clean_line = clean_line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            bullet_html += '<para fontName="Helvetica" fontSize="9" textColor="#FFFFFF" leading="13" leftIndent="10">• ' + clean_line + '</para>'
+            bullet_html += (
+                '<para fontName="Helvetica" fontSize="10" textColor="#FFFFFF" leading="16" leftIndent="8" spaceAfter="4">'
+                '▸ ' + clean_line + '</para>'
+            )
 
     if not bullet_html:
-        bullet_html = '<para fontName="Helvetica" fontSize="9" textColor="#FFFFFF" leading="13" leftIndent="10"><i>None reported.</i></para>'
+        bullet_html = '<para fontName="Helvetica" fontSize="10" textColor="#FFFFFF" leading="16" leftIndent="8"><i>None reported.</i></para>'
 
     content_para = Paragraph(bullet_html, getSampleStyleSheet()['Normal'])
 
     box = Table([[content_para]], colWidths=[17 * cm])
     box.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), bg_color),
-        ('LEFTPADDING', (0, 0), (-1, -1), 14),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 14),
-        ('TOPPADDING', (0, 0), (-1, -1), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('LEFTPADDING', (0, 0), (-1, -1), 18),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 18),
+        ('TOPPADDING', (0, 0), (-1, -1), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+        ('LINEBEFORE', (0, 0), (0, -1), 4, accent_color),
     ]))
 
     return box
@@ -183,17 +240,17 @@ def build_highlights_box(bullets_text, bg_color):
 
 def build_highlights_section(highlights_text):
     elements = []
-    elements.extend(build_section_header('Highlights'))
-    elements.append(build_highlights_box(highlights_text, HIGHLIGHT_BG))
-    elements.append(Spacer(1, 12))
+    elements.extend(build_section_header('Highlights', '✅'))
+    elements.append(build_highlights_box(highlights_text, HIGHLIGHT_BG, ACCENT_GREEN))
+    elements.append(Spacer(1, 14))
     return elements
 
 
 def build_lowlights_section(lowlights_text):
     elements = []
-    elements.extend(build_section_header('Lowlights'))
-    elements.append(build_highlights_box(lowlights_text, LOWLIGHT_BG))
-    elements.append(Spacer(1, 12))
+    elements.extend(build_section_header('Lowlights & Risks', '⚠️'))
+    elements.append(build_highlights_box(lowlights_text, LOWLIGHT_BG, ACCENT_RED))
+    elements.append(Spacer(1, 16))
     return elements
 
 
@@ -201,32 +258,35 @@ def build_lowlights_section(lowlights_text):
 
 def build_kpi_cards(kpis):
     elements = []
-    elements.extend(build_section_header('Portfolio Key Performance Indicators'))
+    elements.extend(build_section_header('Portfolio Overview', '📊'))
 
     styles = getSampleStyleSheet()
     cards_row = []
+    
     for value, label, color_hex in kpis:
         number_para = Paragraph(
-            '<para fontSize="22" fontName="Helvetica-Bold" textColor="' + color_hex + '" alignment="center">'
+            '<para fontSize="26" fontName="Helvetica-Bold" textColor="' + color_hex + '" alignment="center">'
             '<b>' + str(value) + '</b></para>',
             styles['Normal']
         )
         label_para = Paragraph(
-            '<para fontSize="7" fontName="Helvetica" textColor="' + COLOR_HEX['TEXT_GRAY'] + '" alignment="center">'
-            + label + '</para>',
+            '<para fontSize="8" fontName="Helvetica-Bold" textColor="' + COLOR_HEX['TEXT_MUTED'] + '" alignment="center">'
+            + label.upper() + '</para>',
             styles['Normal']
         )
 
         card_content = [[number_para], [label_para]]
-        card = Table(card_content, colWidths=[3.2 * cm], rowHeights=[1.1 * cm, 0.6 * cm])
+        card = Table(card_content, colWidths=[3.2 * cm], rowHeights=[1.3 * cm, 0.7 * cm])
         card.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), LIGHT_BG),
+            ('BACKGROUND', (0, 0), (-1, -1), CARD_BG),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('LEFTPADDING', (0, 0), (-1, -1), 4),
             ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LINEABOVE', (0, 0), (-1, 0), 3, colors.HexColor(color_hex)),
+            ('BOX', (0, 0), (-1, -1), 0.5, DIVIDER_LIGHT),
         ]))
         cards_row.append(card)
 
@@ -235,249 +295,116 @@ def build_kpi_cards(kpis):
 
     cards_table = Table([cards_row], colWidths=col_widths)
     cards_table.setStyle(TableStyle([
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
     ]))
 
     elements.append(cards_table)
-    elements.append(Spacer(1, 14))
+    elements.append(Spacer(1, 16))
     return elements
 
 
-# ==================== STORE STATUS TABLE ====================
+# ==================== STATUS DISTRIBUTION ====================
 
-def get_store_status(store, shipped_total, required_total):
-    is_launched = bool(store.get('is_launched', False))
-    launch_date_val = store.get('launch_date')
-
-    if is_launched:
-        return ('Launched', ACCENT_GREEN)
-
-    if not launch_date_val:
-        return ('No Date', TEXT_GRAY)
-
-    try:
-        if isinstance(launch_date_val, str):
-            ld = date.fromisoformat(launch_date_val)
-        else:
-            ld = launch_date_val
-    except Exception:
-        return ('—', TEXT_GRAY)
-
-    days_left = (ld - date.today()).days
-    pct = (shipped_total / required_total * 100) if required_total > 0 else 0
-
-    if days_left < 0:
-        return ('Delayed', ACCENT_RED)
-    elif days_left <= 2 and pct < 100:
-        return ('At Risk', ACCENT_ORANGE)
-    elif pct >= 100:
-        return ('Ready', ACCENT_GREEN)
-    else:
-        return ('On Track', ACCENT_BLUE)
-
-
-def build_stores_table(stores_df, shipments_df):
-    elements = []
-    elements.extend(build_section_header('Store Status Summary'))
-
-    if stores_df.empty:
-        elements.append(Paragraph(
-            '<i>No stores to display.</i>',
-            getSampleStyleSheet()['Normal']
-        ))
-        elements.append(Spacer(1, 12))
-        return elements
-
-    header = ['Store', 'Location', 'Launch Date', 'Progress', 'Status', 'Pending']
-    rows = [header]
-    row_statuses = []
-
-    for _, store in stores_df.iterrows():
-        store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else None
-
-        if store_ships is not None and not store_ships.empty:
-            s30 = int(store_ships['qty_30d'].sum())
-            s40 = int(store_ships['qty_40d'].sum())
-            s60 = int(store_ships['qty_60d'].sum())
-        else:
-            s30 = s40 = s60 = 0
-
-        shipped_total = s30 + s40 + s60
-        required_total = int(store['required_30d']) + int(store['required_40d']) + int(store['required_60d'])
-        pct = (shipped_total / required_total * 100) if required_total > 0 else 0
-        pending_total = max(0, required_total - shipped_total)
-
-        status_label, status_color = get_store_status(store, shipped_total, required_total)
-
-        launch_date_val = store.get('launch_date')
-        if launch_date_val:
-            if isinstance(launch_date_val, str):
-                try:
-                    launch_str = date.fromisoformat(launch_date_val).strftime('%d %b %Y')
-                except Exception:
-                    launch_str = str(launch_date_val)
-            else:
-                launch_str = launch_date_val.strftime('%d %b %Y')
-        else:
-            launch_str = '—'
-
-        rows.append([
-            str(store['name'])[:22],
-            str(store['location'] or '—')[:20],
-            launch_str,
-            str(int(pct)) + '%',
-            status_label,
-            str(pending_total)
-        ])
-        row_statuses.append(status_color)
-
-    col_widths = [3.2 * cm, 3 * cm, 2.5 * cm, 2 * cm, 2.3 * cm, 1.8 * cm]
-    table = Table(rows, colWidths=col_widths, repeatRows=1)
-
-    style = TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), DARK_HEADER),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
-        ('ALIGN', (3, 0), (5, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_GRAY),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')]),
-    ])
-
-    for i, color in enumerate(row_statuses, start=1):
-        style.add('BACKGROUND', (4, i), (4, i), color)
-        style.add('TEXTCOLOR', (4, i), (4, i), colors.white)
-        style.add('FONTNAME', (4, i), (4, i), 'Helvetica-Bold')
-
-    table.setStyle(style)
-    elements.append(table)
-    elements.append(Spacer(1, 14))
-    return elements
-
-
-# ==================== SHIPMENTS TABLE ====================
-
-def build_shipments_table(shipments_df):
-    """Build shipments table with transport status per shipment"""
-    elements = []
-    
-    if shipments_df.empty:
-        return elements
-    
-    # Filter pending/in transit only
-    if 'delivery_status' in shipments_df.columns:
-        active = shipments_df[shipments_df['delivery_status'].isin(['Pending', 'In Transit', 'Delayed'])]
-    else:
-        active = shipments_df
-
-    if active.empty:
-        return elements
-
-    elements.extend(build_section_header('Active Shipments & Transport Status'))
-
-    header = ['ID', 'Store', 'Ship Date', 'Scheduled', 'Status', 'Transport', 'Items']
-    rows = [header]
-    row_status_colors = []
-    row_transport_colors = []
-
-    status_colors = {
-        'Pending': ACCENT_YELLOW,
-        'In Transit': ACCENT_BLUE,
-        'Delivered': ACCENT_GREEN,
-        'Delayed': ACCENT_RED,
+def calculate_store_statuses(stores_df, shipments_df):
+    """Calculate distribution of stores by status"""
+    counts = {
+        'Launched': 0,
+        'Ready': 0,
+        'On Track': 0,
+        'At Risk': 0,
+        'Delayed': 0,
+        'No Date': 0,
     }
-
-    for _, ship in active.head(15).iterrows():
-        ship_id = '#' + str(ship.get('id', ''))
-        store_name = str(ship.get('store_name', 'Unknown'))[:20]
+    
+    if stores_df.empty:
+        return counts
+    
+    today = date.today()
+    
+    for _, store in stores_df.iterrows():
+        is_launched = bool(store.get('is_launched', False))
         
-        ship_date = ship.get('date')
-        if ship_date:
-            if isinstance(ship_date, str):
-                try:
-                    ship_date_str = date.fromisoformat(ship_date[:10]).strftime('%d %b')
-                except Exception:
-                    ship_date_str = str(ship_date)[:10]
-            else:
-                ship_date_str = ship_date.strftime('%d %b') if hasattr(ship_date, 'strftime') else str(ship_date)
+        if is_launched:
+            counts['Launched'] += 1
+            continue
+        
+        ld = _to_date(store.get('launch_date'))
+        if not ld:
+            counts['No Date'] += 1
+            continue
+        
+        # Calc shipping progress
+        store_ships = shipments_df[shipments_df['store_id'] == store['id']] if not shipments_df.empty else None
+        if store_ships is not None and not store_ships.empty:
+            shipped = int(store_ships['qty_30d'].sum()) + int(store_ships['qty_40d'].sum()) + int(store_ships['qty_60d'].sum())
         else:
-            ship_date_str = '—'
+            shipped = 0
         
-        scheduled = ship.get('scheduled_date')
-        if scheduled:
-            if isinstance(scheduled, str):
-                try:
-                    sched_str = date.fromisoformat(scheduled[:10]).strftime('%d %b')
-                except Exception:
-                    sched_str = str(scheduled)[:10]
-            else:
-                sched_str = scheduled.strftime('%d %b') if hasattr(scheduled, 'strftime') else str(scheduled)
+        required = int(store['required_30d']) + int(store['required_40d']) + int(store['required_60d'])
+        pct = (shipped / required * 100) if required > 0 else 0
+        days_left = (ld - today).days
+        
+        if days_left < 0:
+            counts['Delayed'] += 1
+        elif days_left <= 2 and pct < 100:
+            counts['At Risk'] += 1
+        elif pct >= 100:
+            counts['Ready'] += 1
         else:
-            sched_str = '—'
+            counts['On Track'] += 1
+    
+    return counts
+
+
+def build_status_distribution(stores_df, shipments_df):
+    elements = []
+    elements.extend(build_section_header('Store Status Distribution', '🎯'))
+    
+    counts = calculate_store_statuses(stores_df, shipments_df)
+    
+    status_config = [
+        ('Launched', ACCENT_GREEN, '✓'),
+        ('Ready', colors.HexColor('#16A085'), '●'),
+        ('On Track', ACCENT_BLUE, '●'),
+        ('At Risk', ACCENT_ORANGE, '!'),
+        ('Delayed', ACCENT_RED, '✗'),
+        ('No Date', TEXT_MUTED, '?'),
+    ]
+    
+    cards = []
+    for status, color, icon in status_config:
+        count = counts[status]
         
-        status = ship.get('delivery_status') or 'Pending'
-        transport_ready = bool(ship.get('transportation_ready', False))
-        transport_text = '✓ Ready' if transport_ready else '✗ Not Ready'
+        number_para = Paragraph(
+            '<para fontSize="22" fontName="Helvetica-Bold" textColor="#FFFFFF" alignment="center">'
+            '<b>' + str(count) + '</b></para>',
+            getSampleStyleSheet()['Normal']
+        )
+        label_para = Paragraph(
+            '<para fontSize="8" fontName="Helvetica-Bold" textColor="#FFFFFF" alignment="center">'
+            + status.upper() + '</para>',
+            getSampleStyleSheet()['Normal']
+        )
         
-        total_items = int(ship.get('qty_30d', 0) or 0) + int(ship.get('qty_40d', 0) or 0) + int(ship.get('qty_60d', 0) or 0)
-        
-        rows.append([
-            ship_id,
-            store_name,
-            ship_date_str,
-            sched_str,
-            status,
-            transport_text,
-            str(total_items)
-        ])
-        row_status_colors.append(status_colors.get(status, TEXT_GRAY))
-        row_transport_colors.append(ACCENT_GREEN if transport_ready else ACCENT_RED)
-
-    col_widths = [1.2 * cm, 3.5 * cm, 2 * cm, 2 * cm, 2.5 * cm, 2.8 * cm, 1.5 * cm]
-    table = Table(rows, colWidths=col_widths, repeatRows=1)
-
-    style = TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), DARK_HEADER),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
-        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-        ('ALIGN', (2, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_GRAY),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')]),
-    ])
-
-    # Color status column
-    for i, color in enumerate(row_status_colors, start=1):
-        style.add('BACKGROUND', (4, i), (4, i), color)
-        style.add('TEXTCOLOR', (4, i), (4, i), colors.white)
-        style.add('FONTNAME', (4, i), (4, i), 'Helvetica-Bold')
-
-    # Color transport column
-    for i, color in enumerate(row_transport_colors, start=1):
-        style.add('BACKGROUND', (5, i), (5, i), color)
-        style.add('TEXTCOLOR', (5, i), (5, i), colors.white)
-        style.add('FONTNAME', (5, i), (5, i), 'Helvetica-Bold')
-
-    table.setStyle(style)
-    elements.append(table)
-    elements.append(Spacer(1, 14))
+        card = Table([[number_para], [label_para]], colWidths=[2.6 * cm], rowHeights=[1 * cm, 0.7 * cm])
+        card.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), color),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        cards.append(card)
+    
+    cards_table = Table([cards], colWidths=[2.6 * cm] * 6)
+    cards_table.setStyle(TableStyle([
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    
+    elements.append(cards_table)
+    elements.append(Spacer(1, 16))
     return elements
 
 
@@ -485,7 +412,7 @@ def build_shipments_table(shipments_df):
 
 def build_dividers_summary(stocks, stores_df, shipments_df):
     elements = []
-    elements.extend(build_section_header('Dividers Summary'))
+    elements.extend(build_section_header('Dividers Inventory & Fulfillment', '📦'))
 
     header = ['Type', 'Vendor Stock', 'Required', 'Shipped', 'Pending', 'Progress']
     rows = [header]
@@ -521,7 +448,7 @@ def build_dividers_summary(stocks, stores_df, shipments_df):
         str(total_pending), str(int(total_pct)) + '%'
     ])
 
-    col_widths = [2.5 * cm, 3 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm]
+    col_widths = [2.5 * cm, 3 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 4 * cm]
     table = Table(rows, colWidths=col_widths, repeatRows=1)
 
     style = TableStyle([
@@ -529,17 +456,18 @@ def build_dividers_summary(stocks, stores_df, shipments_df):
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
         ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
         ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 7),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
-        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_GRAY),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#E8F4F8')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_LIGHT),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FFF3E0')),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('LINEABOVE', (0, -1), (-1, -1), 1.5, ACCENT_PRIMARY),
     ])
 
     for i, color in enumerate(row_colors, start=1):
@@ -549,26 +477,34 @@ def build_dividers_summary(stocks, stores_df, shipments_df):
 
     table.setStyle(style)
     elements.append(table)
-    elements.append(Spacer(1, 14))
+    elements.append(Spacer(1, 16))
     return elements
 
 
-# ==================== MAGNET STATUS ====================
+# ==================== MAGNET SUMMARY ====================
 
 def build_magnet_summary(magnet_stock, magnet_status):
     elements = []
-    elements.extend(build_section_header('Magnet Status'))
+    elements.extend(build_section_header('Magnet Coverage', '🧲'))
 
+    info_text = '<b>Strips Available at Vendor:</b> ' + str(magnet_stock) + ' units'
     info_para = Paragraph(
-        '<para fontSize="9" fontName="Helvetica" textColor="' + COLOR_HEX['TEXT_DARK'] + '">'
-        '<b>Strips at Vendor:</b> ' + str(magnet_stock) + ' | '
-        'Each strip can magnetize ~1 divider</para>',
+        '<para fontSize="9" fontName="Helvetica" textColor="' + COLOR_HEX['TEXT_DARK'] + '">' + info_text + '</para>',
         getSampleStyleSheet()['Normal']
     )
-    elements.append(info_para)
-    elements.append(Spacer(1, 6))
+    
+    info_box = Table([[info_para]], colWidths=[17 * cm])
+    info_box.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), LIGHT_BG),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(info_box)
+    elements.append(Spacer(1, 8))
 
-    header = ['Divider Type', 'With Magnet', 'Without Magnet', 'Total', 'Coverage %']
+    header = ['Type', 'With Magnet', 'Without Magnet', 'Total', 'Coverage']
     rows = [header]
     color_map = {'30D': ACCENT_BLUE, '40D': ACCENT_ORANGE, '60D': ACCENT_PURPLE}
     row_colors = []
@@ -593,7 +529,7 @@ def build_magnet_summary(magnet_stock, magnet_status):
     grand_pct = (total_with / grand_total * 100) if grand_total > 0 else 0
     rows.append(['TOTAL', str(total_with), str(total_without), str(grand_total), str(int(grand_pct)) + '%'])
 
-    col_widths = [3 * cm, 3 * cm, 3.5 * cm, 2.5 * cm, 3 * cm]
+    col_widths = [2.5 * cm, 3.5 * cm, 3.5 * cm, 3 * cm, 4.5 * cm]
     table = Table(rows, colWidths=col_widths, repeatRows=1)
 
     style = TableStyle([
@@ -601,17 +537,18 @@ def build_magnet_summary(magnet_stock, magnet_status):
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
         ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
         ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 7),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
-        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_GRAY),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#E8F4F8')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_LIGHT),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FFF3E0')),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('LINEABOVE', (0, -1), (-1, -1), 1.5, ACCENT_PRIMARY),
     ])
 
     for i, color in enumerate(row_colors, start=1):
@@ -621,36 +558,263 @@ def build_magnet_summary(magnet_stock, magnet_status):
 
     table.setStyle(style)
     elements.append(table)
-    elements.append(Spacer(1, 14))
+    elements.append(Spacer(1, 16))
     return elements
 
 
-# ==================== ACTION ITEMS TABLE ====================
+# ==================== CRITICAL ALERTS ====================
+
+def collect_critical_alerts(stocks, threshold, stores_df, shipments_df,
+                             magnet_stock, magnet_status, action_items_df):
+    """Collect top critical issues for leadership attention"""
+    alerts = []
+    today = date.today()
+    
+    # Stock outages
+    for dtype in ['30D', '40D', '60D']:
+        stock = stocks.get(dtype, 0)
+        col = 'required_' + dtype.lower()
+        ship_col = 'qty_' + dtype.lower()
+        required = int(stores_df[col].sum()) if not stores_df.empty else 0
+        shipped = int(shipments_df[ship_col].sum()) if not shipments_df.empty else 0
+        remaining = max(0, required - shipped)
+        
+        if stock == 0 and remaining > 0:
+            alerts.append({
+                'severity': 'CRITICAL',
+                'category': 'Stock',
+                'message': dtype + ' OUT OF STOCK - ' + str(remaining) + ' units needed for pending shipments',
+                'color': ACCENT_RED,
+            })
+        elif stock < remaining:
+            shortage = remaining - stock
+            alerts.append({
+                'severity': 'CRITICAL',
+                'category': 'Stock',
+                'message': dtype + ' shortage: Need ' + str(shortage) + ' more units (Stock: ' + str(stock) + ')',
+                'color': ACCENT_RED,
+            })
+    
+    # Overdue/imminent launches
+    if not stores_df.empty:
+        for _, store in stores_df.iterrows():
+            if store.get('is_launched'):
+                continue
+            ld = _to_date(store.get('launch_date'))
+            if not ld:
+                continue
+            days = (ld - today).days
+            name = str(store['name'])
+            
+            if days < 0:
+                alerts.append({
+                    'severity': 'CRITICAL',
+                    'category': 'Launch',
+                    'message': name + ' is ' + str(abs(days)) + ' days OVERDUE - not yet launched',
+                    'color': ACCENT_RED,
+                })
+            elif days == 0:
+                alerts.append({
+                    'severity': 'CRITICAL',
+                    'category': 'Launch',
+                    'message': name + ' is launching TODAY',
+                    'color': ACCENT_ORANGE,
+                })
+            elif days == 1:
+                alerts.append({
+                    'severity': 'HIGH',
+                    'category': 'Launch',
+                    'message': name + ' launches TOMORROW',
+                    'color': ACCENT_ORANGE,
+                })
+    
+    # Transport not ready
+    if not shipments_df.empty:
+        no_transport_count = 0
+        urgent_no_transport = []
+        for _, ship in shipments_df.iterrows():
+            status = ship.get('delivery_status') or 'Pending'
+            if status not in ('Pending', 'In Transit'):
+                continue
+            if bool(ship.get('transportation_ready', False)):
+                continue
+            
+            scheduled = _to_date(ship.get('scheduled_date'))
+            if scheduled:
+                days = (scheduled - today).days
+                if days <= 2:
+                    urgent_no_transport.append((ship.get('store_name', 'Unknown'), days))
+            no_transport_count += 1
+        
+        if urgent_no_transport:
+            for store_name, days in urgent_no_transport[:2]:
+                msg = 'Transport not arranged for ' + str(store_name)
+                if days < 0:
+                    msg += ' (' + str(abs(days)) + 'd overdue)'
+                elif days == 0:
+                    msg += ' (delivers today)'
+                else:
+                    msg += ' (delivers in ' + str(days) + 'd)'
+                alerts.append({
+                    'severity': 'CRITICAL',
+                    'category': 'Transport',
+                    'message': msg,
+                    'color': ACCENT_RED,
+                })
+    
+    # Magnet shortage
+    total_without_magnet = sum(
+        magnet_status.get(t, {}).get('without_magnet', 0)
+        for t in ['30D', '40D', '60D']
+    )
+    if total_without_magnet > 0 and magnet_stock < total_without_magnet:
+        shortage = total_without_magnet - magnet_stock
+        alerts.append({
+            'severity': 'HIGH',
+            'category': 'Magnet',
+            'message': 'Magnet strips shortage: Need ' + str(shortage) + ' more strips',
+            'color': ACCENT_ORANGE,
+        })
+    
+    # Overdue actions
+    if action_items_df is not None and not action_items_df.empty:
+        overdue_actions = 0
+        for _, item in action_items_df.iterrows():
+            if item.get('status') == 'Completed':
+                continue
+            eta = _to_date(item.get('eta'))
+            if eta and (eta - today).days < 0:
+                overdue_actions += 1
+        if overdue_actions > 0:
+            alerts.append({
+                'severity': 'HIGH',
+                'category': 'Actions',
+                'message': str(overdue_actions) + ' action items are overdue',
+                'color': ACCENT_ORANGE,
+            })
+    
+    # Sort by severity
+    severity_order = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2}
+    alerts.sort(key=lambda a: severity_order.get(a['severity'], 99))
+    
+    return alerts[:8]  # Top 8 only
+
+
+def build_critical_alerts(stocks, threshold, stores_df, shipments_df,
+                           magnet_stock, magnet_status, action_items_df):
+    elements = []
+    
+    alerts = collect_critical_alerts(
+        stocks, threshold, stores_df, shipments_df,
+        magnet_stock, magnet_status, action_items_df
+    )
+    
+    if not alerts:
+        elements.extend(build_section_header('Critical Items', '🚨'))
+        success_box = Table([[Paragraph(
+            '<para fontSize="11" fontName="Helvetica-Bold" textColor="#FFFFFF" alignment="center">'
+            '✓ No critical items at this time. All systems operational.</para>',
+            getSampleStyleSheet()['Normal']
+        )]], colWidths=[17 * cm])
+        success_box.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), ACCENT_GREEN),
+            ('LEFTPADDING', (0, 0), (-1, -1), 14),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 14),
+            ('TOPPADDING', (0, 0), (-1, -1), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+        ]))
+        elements.append(success_box)
+        elements.append(Spacer(1, 16))
+        return elements
+    
+    elements.extend(build_section_header('Critical Items Requiring Attention', '🚨'))
+    
+    header = ['Severity', 'Category', 'Issue']
+    rows = [header]
+    row_colors = []
+    
+    for alert in alerts:
+        rows.append([alert['severity'], alert['category'], alert['message']])
+        row_colors.append(alert['color'])
+    
+    col_widths = [2.5 * cm, 2.5 * cm, 12 * cm]
+    table = Table(rows, colWidths=col_widths, repeatRows=1)
+    
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), DARK_HEADER),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
+        ('ALIGN', (0, 0), (1, -1), 'CENTER'),
+        ('ALIGN', (2, 0), (2, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_LIGHT),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAFBFC')]),
+    ])
+    
+    # Color severity column
+    for i, color in enumerate(row_colors, start=1):
+        style.add('BACKGROUND', (0, i), (0, i), color)
+        style.add('TEXTCOLOR', (0, i), (0, i), colors.white)
+        style.add('FONTNAME', (0, i), (0, i), 'Helvetica-Bold')
+    
+    table.setStyle(style)
+    elements.append(table)
+    elements.append(Spacer(1, 16))
+    return elements
+
+
+# ==================== ACTION ITEMS ====================
 
 def build_action_items_table(items_df):
     elements = []
-    elements.extend(build_section_header('Action Items'))
+    elements.extend(build_section_header('Open Action Items', '📌'))
 
     if items_df.empty:
         elements.append(Paragraph(
-            '<i>No action items.</i>',
+            '<para fontSize="10" fontName="Helvetica" textColor="' + COLOR_HEX['TEXT_MUTED'] + '"><i>No open action items.</i></para>',
             getSampleStyleSheet()['Normal']
         ))
         elements.append(Spacer(1, 12))
         return elements
 
-    header = ['#', 'Action', 'Owner', 'ETA', 'Status', 'Store']
+    # Filter only open ones
+    open_items = items_df[items_df['status'] != 'Completed'] if 'status' in items_df.columns else items_df
+    
+    if open_items.empty:
+        success_box = Table([[Paragraph(
+            '<para fontSize="11" fontName="Helvetica-Bold" textColor="#FFFFFF" alignment="center">'
+            '✓ All action items completed.</para>',
+            getSampleStyleSheet()['Normal']
+        )]], colWidths=[17 * cm])
+        success_box.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), ACCENT_GREEN),
+            ('LEFTPADDING', (0, 0), (-1, -1), 14),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 14),
+            ('TOPPADDING', (0, 0), (-1, -1), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+        ]))
+        elements.append(success_box)
+        elements.append(Spacer(1, 12))
+        return elements
+
+    header = ['#', 'Action', 'Owner', 'ETA', 'Status']
     rows = [header]
     row_statuses = []
 
     status_colors = {
         'Pending': ACCENT_YELLOW,
         'In Progress': ACCENT_BLUE,
-        'Completed': ACCENT_GREEN,
         'Blocked': ACCENT_RED,
     }
 
-    for idx, (_, item) in enumerate(items_df.iterrows(), start=1):
+    for idx, (_, item) in enumerate(open_items.iterrows(), start=1):
         eta = item.get('eta')
         if eta:
             if isinstance(eta, str):
@@ -664,32 +828,31 @@ def build_action_items_table(items_df):
             eta_str = '—'
 
         status = item.get('status') or 'Pending'
-        action = str(item.get('action_text') or '')[:50]
-        owner = str(item.get('owner') or '—')[:20]
-        store_name = str(item.get('store_name') or '—')[:18]
+        action = str(item.get('action_text') or '')[:65]
+        owner = str(item.get('owner') or '—')[:18]
 
-        rows.append([str(idx), action, owner, eta_str, status, store_name])
-        row_statuses.append(status_colors.get(status, TEXT_GRAY))
+        rows.append([str(idx), action, owner, eta_str, status])
+        row_statuses.append(status_colors.get(status, TEXT_MUTED))
 
-    col_widths = [0.8 * cm, 5.5 * cm, 2.8 * cm, 2.3 * cm, 2.5 * cm, 3.1 * cm]
+    col_widths = [0.8 * cm, 8 * cm, 3 * cm, 2.5 * cm, 2.7 * cm]
     table = Table(rows, colWidths=col_widths, repeatRows=1)
 
     style = TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), DARK_HEADER),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
         ('TEXTCOLOR', (0, 1), (-1, -1), TEXT_DARK),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
         ('ALIGN', (3, 0), (4, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_GRAY),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, DIVIDER_LIGHT),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAFBFC')]),
     ])
 
     for i, color in enumerate(row_statuses, start=1):
@@ -705,13 +868,22 @@ def build_action_items_table(items_df):
 
 # ==================== FOOTER ====================
 
-def add_page_number(canvas_obj, doc):
+def add_page_decorations(canvas_obj, doc):
     canvas_obj.saveState()
+    
+    # Footer line
+    canvas_obj.setStrokeColor(DIVIDER_LIGHT)
+    canvas_obj.setLineWidth(0.5)
+    canvas_obj.line(2 * cm, 1.3 * cm, A4[0] - 2 * cm, 1.3 * cm)
+    
+    # Footer text
     canvas_obj.setFont('Helvetica', 8)
-    canvas_obj.setFillColor(TEXT_GRAY)
+    canvas_obj.setFillColor(TEXT_MUTED)
+    
     page_num = canvas_obj.getPageNumber()
-    text = 'Launch Team Tracker - Progress Report | Page ' + str(page_num)
-    canvas_obj.drawCentredString(A4[0] / 2.0, 1 * cm, text)
+    canvas_obj.drawString(2 * cm, 0.8 * cm, 'Launch Team Tracker  •  Confidential')
+    canvas_obj.drawRightString(A4[0] - 2 * cm, 0.8 * cm, 'Page ' + str(page_num))
+    
     canvas_obj.restoreState()
 
 
@@ -730,8 +902,8 @@ def generate_progress_report(
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
         leftMargin=2 * cm, rightMargin=2 * cm,
-        topMargin=1.5 * cm, bottomMargin=1.5 * cm,
-        title='Launch Team Tracker Report'
+        topMargin=1.2 * cm, bottomMargin=1.8 * cm,
+        title='Launch Team Progress Report'
     )
 
     styles = get_styles()
@@ -752,14 +924,18 @@ def generate_progress_report(
     if not report_date:
         report_date = date.today()
 
-    story.append(build_header(week_num, report_date, next_update, styles))
-    story.append(Spacer(1, 16))
+    # Header
+    story.extend(build_header(week_num, report_date, next_update, styles))
+    story.append(Spacer(1, 18))
 
+    # Executive Summary
     story.extend(build_executive_summary(exec_summary, styles))
+    
+    # Highlights & Lowlights
     story.extend(build_highlights_section(highlights))
     story.extend(build_lowlights_section(lowlights))
 
-    # KPI cards
+    # Portfolio KPIs
     total_stores = len(stores_df) if not stores_df.empty else 0
     launched_count = len(stores_df[stores_df['is_launched'] == True]) if not stores_df.empty and 'is_launched' in stores_df.columns else 0
     upcoming_count = total_stores - launched_count
@@ -782,14 +958,26 @@ def generate_progress_report(
         (str(open_actions), 'Open Actions', COLOR_HEX['ACCENT_RED']),
     ]
     story.extend(build_kpi_cards(kpis))
-
-    story.extend(build_stores_table(stores_df, shipments_df))
-    story.extend(build_shipments_table(shipments_df))
+    
+    # Status Distribution
+    story.extend(build_status_distribution(stores_df, shipments_df))
+    
+    # Critical Alerts (most important for leadership)
+    story.extend(build_critical_alerts(
+        stocks, threshold, stores_df, shipments_df,
+        magnet_stock, magnet_status, action_items_df
+    ))
+    
+    # Dividers Summary
     story.extend(build_dividers_summary(stocks, stores_df, shipments_df))
+    
+    # Magnet Coverage
     story.extend(build_magnet_summary(magnet_stock, magnet_status))
+    
+    # Open Action Items
     story.extend(build_action_items_table(action_items_df))
 
-    doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
+    doc.build(story, onFirstPage=add_page_decorations, onLaterPages=add_page_decorations)
 
     buffer.seek(0)
     return buffer
