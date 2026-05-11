@@ -144,50 +144,36 @@ def load_css():
         background: linear-gradient(90deg, rgba(52, 152, 219, 0.3) 0%, rgba(52, 152, 219, 0.1) 100%);
         border-left: 3px solid #3498db;
     }}
-/* ===== SIDEBAR BUTTONS - FORCED DARK STYLE (both modes) ===== */
-[data-testid="stSidebar"] .stButton > button,
-[data-testid="stSidebar"] button[kind="secondary"],
-[data-testid="stSidebar"] button[kind="primary"],
-[data-testid="stSidebar"] button {{
-    background: rgba(255,255,255,0.08) !important;
-    background-color: rgba(255,255,255,0.08) !important;
-    color: white !important;
-    border: 1px solid rgba(255,255,255,0.2) !important;
-    border-radius: 10px !important;
-    transition: all 0.3s ease !important;
-    box-shadow: none !important;
-}}
-
-[data-testid="stSidebar"] .stButton > button *,
-[data-testid="stSidebar"] button * {{
-    color: white !important;
-}}
-
-[data-testid="stSidebar"] .stButton > button:hover,
-[data-testid="stSidebar"] button:hover {{
-    background: rgba(52, 152, 219, 0.3) !important;
-    background-color: rgba(52, 152, 219, 0.3) !important;
-    border-color: #3498db !important;
-    color: white !important;
-    transform: translateX(4px);
-}}
-
-[data-testid="stSidebar"] .stButton > button[kind="primary"],
-[data-testid="stSidebar"] button[kind="primary"] {{
-    background: linear-gradient(90deg, rgba(52, 152, 219, 0.5) 0%, rgba(52, 152, 219, 0.25) 100%) !important;
-    border-color: #3498db !important;
-    color: white !important;
-}}
-
-[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover,
-[data-testid="stSidebar"] button[kind="primary"]:hover {{
-    background: linear-gradient(90deg, rgba(52, 152, 219, 0.7) 0%, rgba(52, 152, 219, 0.4) 100%) !important;
-}}
-
-/* Override the global button styles inside sidebar */
-[data-testid="stSidebar"] .stButton > button {{
-    box-shadow: none !important;
-}}
+    
+    /* ===== SIDEBAR BUTTONS - FORCED DARK STYLE ===== */
+    [data-testid="stSidebar"] .stButton > button,
+    [data-testid="stSidebar"] button[kind="secondary"],
+    [data-testid="stSidebar"] button[kind="primary"],
+    [data-testid="stSidebar"] button {{
+        background: rgba(255,255,255,0.08) !important;
+        background-color: rgba(255,255,255,0.08) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        border-radius: 10px !important;
+        transition: all 0.3s ease !important;
+        box-shadow: none !important;
+    }}
+    [data-testid="stSidebar"] .stButton > button *,
+    [data-testid="stSidebar"] button * {{
+        color: white !important;
+    }}
+    [data-testid="stSidebar"] .stButton > button:hover,
+    [data-testid="stSidebar"] button:hover {{
+        background: rgba(52, 152, 219, 0.3) !important;
+        background-color: rgba(52, 152, 219, 0.3) !important;
+        border-color: #3498db !important;
+        color: white !important;
+    }}
+    [data-testid="stSidebar"] .stButton > button[kind="primary"],
+    [data-testid="stSidebar"] button[kind="primary"] {{
+        background: linear-gradient(90deg, rgba(52, 152, 219, 0.5) 0%, rgba(52, 152, 219, 0.25) 100%) !important;
+        border-color: #3498db !important;
+    }}
     
     /* ===== HEADINGS ===== */
     h1 {{
@@ -264,8 +250,10 @@ def load_css():
         color: {c['text_secondary']} !important;
     }}
     
-    /* ===== BUTTONS ===== */
-    .stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {{
+    /* ===== BUTTONS (MAIN AREA) ===== */
+    .main .stButton > button,
+    .main .stFormSubmitButton > button,
+    .main .stDownloadButton > button {{
         border: none;
         padding: 11px 24px;
         border-radius: 10px;
@@ -274,35 +262,35 @@ def load_css():
         letter-spacing: 0.3px;
         font-size: 0.95rem;
     }}
-    .stButton > button {{
+    .main .stButton > button {{
         background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
         color: white !important;
         box-shadow: 0 4px 14px rgba(52, 152, 219, 0.35);
     }}
-    .stButton > button:hover {{
+    .main .stButton > button:hover {{
         transform: translateY(-3px);
         box-shadow: 0 6px 20px rgba(52, 152, 219, 0.5);
     }}
-    .stFormSubmitButton > button {{
+    .main .stFormSubmitButton > button {{
         background: linear-gradient(135deg, #27ae60 0%, #229954 100%) !important;
         color: white !important;
         box-shadow: 0 4px 14px rgba(39, 174, 96, 0.35);
     }}
-    .stFormSubmitButton > button:hover {{
+    .main .stFormSubmitButton > button:hover {{
         transform: translateY(-3px);
         box-shadow: 0 6px 20px rgba(39, 174, 96, 0.5);
     }}
-    .stDownloadButton > button {{
+    .main .stDownloadButton > button {{
         background: linear-gradient(135deg, #9b59b6 0%, #6c3483 100%) !important;
         color: white !important;
         box-shadow: 0 4px 14px rgba(155, 89, 182, 0.35);
     }}
-    .stDownloadButton > button:hover {{
+    .main .stDownloadButton > button:hover {{
         transform: translateY(-3px);
         box-shadow: 0 6px 20px rgba(155, 89, 182, 0.5);
     }}
     
-        /* ===== INPUTS ===== */
+    /* ===== INPUTS ===== */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stTextArea > div > div > textarea,
@@ -322,48 +310,6 @@ def load_css():
         box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15) !important;
     }}
     
-    /* Placeholder text */
-    .stTextInput input::placeholder,
-    .stTextArea textarea::placeholder,
-    .stNumberInput input::placeholder {{
-        color: {c['text_muted']} !important;
-        opacity: 0.7 !important;
-    }}
-    
-    /* Text area specific */
-    .stTextArea > div > div {{
-        background: {c['input_bg']} !important;
-    }}
-    .stTextArea textarea {{
-        background: {c['input_bg']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    
-    /* Number input +/- buttons */
-    .stNumberInput button {{
-        background: {c['bg_tertiary']} !important;
-        color: {c['text_primary']} !important;
-        border-color: {c['input_border']} !important;
-    }}
-    .stNumberInput button:hover {{
-        background: {c['border_color']} !important;
-    }}
-    .stNumberInput button svg {{
-        fill: {c['text_primary']} !important;
-    }}
-    
-    /* Date Input wrapper */
-    .stDateInput > div > div {{
-        background: {c['input_bg']} !important;
-        border: 1.5px solid {c['input_border']} !important;
-        border-radius: 10px !important;
-    }}
-    .stDateInput input {{
-        background: {c['input_bg']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    
-    /* Selectbox */
     .stSelectbox > div > div {{
         background: {c['input_bg']} !important;
         border-radius: 10px !important;
@@ -378,64 +324,32 @@ def load_css():
         color: {c['text_primary']} !important;
     }}
     
-    /* Selectbox dropdown menu (when opened) */
-    [data-baseweb="popover"],
-    [data-baseweb="menu"],
-    [role="listbox"] {{
-        background: {c['bg_secondary']} !important;
-        color: {c['text_primary']} !important;
-        border: 1px solid {c['border_color']} !important;
-    }}
-    [role="option"],
-    [data-baseweb="menu"] li,
-    [data-baseweb="menu"] [role="option"] {{
-        background: {c['bg_secondary']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    [role="option"]:hover,
-    [data-baseweb="menu"] li:hover {{
-        background: {c['bg_tertiary']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    [aria-selected="true"][role="option"] {{
-        background: rgba(52, 152, 219, 0.2) !important;
-        color: {c['text_primary']} !important;
-    }}
-    
     /* Date picker calendar */
     [data-baseweb="calendar"] {{
         background: {c['bg_secondary']} !important;
         color: {c['text_primary']} !important;
-        border: 1px solid {c['border_color']} !important;
     }}
     [data-baseweb="calendar"] * {{
         color: {c['text_primary']} !important;
     }}
-    [data-baseweb="calendar"] button {{
-        background: transparent !important;
-        color: {c['text_primary']} !important;
-    }}
-    [data-baseweb="calendar"] button:hover {{
-        background: {c['bg_tertiary']} !important;
-    }}
-    [data-baseweb="calendar"] [aria-selected="true"] {{
+    [data-baseweb="calendar"] button[aria-selected="true"] {{
         background: #3498db !important;
         color: white !important;
     }}
-    [data-baseweb="popover"] [data-baseweb="calendar"] {{
+    [data-baseweb="popover"] {{
         background: {c['bg_secondary']} !important;
     }}
     
-    /* Calendar header (month/year) */
-    [data-baseweb="calendar"] [data-baseweb="calendar-header"] {{
+    /* Selectbox dropdown */
+    ul[role="listbox"] {{
+        background: {c['bg_secondary']} !important;
+    }}
+    li[role="option"] {{
         background: {c['bg_secondary']} !important;
         color: {c['text_primary']} !important;
     }}
-    
-    /* Date input popup */
-    div[data-baseweb="popover"] > div {{
-        background: {c['bg_secondary']} !important;
-        color: {c['text_primary']} !important;
+    li[role="option"]:hover {{
+        background: {c['bg_tertiary']} !important;
     }}
     
     /* Checkboxes */
@@ -445,39 +359,9 @@ def load_css():
     .stCheckbox label span {{
         color: {c['text_primary']} !important;
     }}
-    .stCheckbox [data-baseweb="checkbox"] > div {{
-        background: {c['input_bg']} !important;
-        border-color: {c['input_border']} !important;
-    }}
     
     /* Radio */
     .stRadio label {{
-        color: {c['text_primary']} !important;
-    }}
-    .stRadio label span {{
-        color: {c['text_primary']} !important;
-    }}
-    
-    /* Form labels */
-    label[data-testid="stWidgetLabel"],
-    label[data-testid="stWidgetLabel"] p,
-    label[data-testid="stWidgetLabel"] div {{
-        color: {c['text_primary']} !important;
-    }}
-    
-    /* Slider (if used) */
-    .stSlider [data-baseweb="slider"] {{
-        background: {c['input_bg']} !important;
-    }}
-    
-    /* File uploader */
-    [data-testid="stFileUploader"] section {{
-        background: {c['input_bg']} !important;
-        border: 2px dashed {c['input_border']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    [data-testid="stFileUploader"] section button {{
-        background: {c['bg_tertiary']} !important;
         color: {c['text_primary']} !important;
     }}
     
@@ -515,69 +399,27 @@ def load_css():
         box-shadow: {c['card_shadow']};
     }}
     
-  /* ===== DATAFRAMES / TABLES - DARK MODE FIX ===== */
+    /* ===== DATAFRAMES / TABLES ===== */
     [data-testid="stDataFrame"] {{
         border-radius: 12px;
         overflow: hidden;
         box-shadow: {c['card_shadow']};
         border: 1px solid {c['border_color']};
-        background: {c['bg_secondary']} !important;
+        background: {c['bg_secondary']};
     }}
-    
-    [data-testid="stDataFrame"] > div {{
-        background: {c['bg_secondary']} !important;
-    }}
-    
-    /* Header */
-    [data-testid="stDataFrame"] thead tr th,
-    [data-testid="stDataFrame"] [role="columnheader"] {{
+    [data-testid="stDataFrame"] thead tr th {{
         background: linear-gradient(90deg, #2c3e50 0%, #34495e 100%) !important;
         color: white !important;
         font-weight: 600 !important;
         text-transform: uppercase;
         font-size: 0.8rem !important;
     }}
-    
-    /* Body cells */
-    [data-testid="stDataFrame"] tbody tr td,
-    [data-testid="stDataFrame"] [role="cell"],
-    [data-testid="stDataFrame"] [role="gridcell"] {{
+    [data-testid="stDataFrame"] tbody tr td {{
         color: {c['text_primary']} !important;
-        background: {c['bg_secondary']} !important;
+        background: {c['bg_secondary']};
     }}
-    
-    /* Row hover */
     [data-testid="stDataFrame"] tbody tr:hover td {{
         background: {c['bg_tertiary']} !important;
-    }}
-    
-    /* Glide Data Grid (modern Streamlit) */
-    [data-testid="stDataFrame"] canvas {{
-        background: {c['bg_secondary']} !important;
-    }}
-    
-    /* Row backgrounds */
-    [data-testid="stDataFrame"] [data-testid="StyledDataFrameDataCell"] {{
-        background: {c['bg_secondary']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    
-    /* Row separators */
-    [data-testid="stDataFrame"] tbody tr {{
-        background: {c['bg_secondary']} !important;
-        border-bottom: 1px solid {c['border_color']} !important;
-    }}
-    
-    /* Index column */
-    [data-testid="stDataFrame"] [data-testid="StyledIndex"] {{
-        background: {c['bg_tertiary']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    
-    /* Glide grid container */
-    [data-testid="stDataFrame"] .dvn-scroller,
-    [data-testid="stDataFrame"] .dvn-stack {{
-        background: {c['bg_secondary']} !important;
     }}
     
     /* ===== ALERTS ===== */
@@ -739,13 +581,7 @@ def load_css():
         margin: 24px 0;
     }}
     
-    /* ===== DIALOGS / MODALS ===== */
-    [data-testid="stDialog"] {{
-        background: {c['bg_secondary']};
-        color: {c['text_primary']};
-    }}
-    
-    /* ===== CODE BLOCKS ===== */
+    /* Code blocks */
     code {{
         background: {c['bg_tertiary']} !important;
         color: {c['text_primary']} !important;
@@ -753,148 +589,10 @@ def load_css():
         border-radius: 4px;
     }}
     
-    /* Ensure all text is readable */
     .stMarkdown strong, .stMarkdown b {{
         color: {c['text_primary']} !important;
     }}
-    /* ============ DARK MODE - FORCE FIX ============ */
-    
-    /* Secondary buttons (Auto-Generate, etc) */
-    .stButton > button[kind="secondary"],
-    button[kind="secondary"] {{
-        background: {c['bg_secondary']} !important;
-        color: {c['text_primary']} !important;
-        border: 1.5px solid {c['input_border']} !important;
-        box-shadow: none !important;
-    }}
-    .stButton > button[kind="secondary"]:hover,
-    button[kind="secondary"]:hover {{
-        background: {c['bg_tertiary']} !important;
-        border-color: #3498db !important;
-        color: {c['text_primary']} !important;
-        transform: translateY(-2px);
-    }}
-    
-    /* All text inputs - FORCE DARK */
-    div[data-baseweb="input"] {{
-        background: {c['input_bg']} !important;
-    }}
-    div[data-baseweb="input"] input {{
-        background: {c['input_bg']} !important;
-        color: {c['text_primary']} !important;
-        -webkit-text-fill-color: {c['text_primary']} !important;
-    }}
-    
-    /* All text areas - FORCE DARK */
-    div[data-baseweb="textarea"] {{
-        background: {c['input_bg']} !important;
-    }}
-    div[data-baseweb="textarea"] textarea {{
-        background: {c['input_bg']} !important;
-        color: {c['text_primary']} !important;
-        -webkit-text-fill-color: {c['text_primary']} !important;
-    }}
-    
-    /* Number input wrapper */
-    .stNumberInput > div {{
-        background: {c['input_bg']} !important;
-    }}
-    .stNumberInput > div > div {{
-        background: {c['input_bg']} !important;
-    }}
-    .stNumberInput input {{
-        background: {c['input_bg']} !important;
-        color: {c['text_primary']} !important;
-        -webkit-text-fill-color: {c['text_primary']} !important;
-    }}
-    
-    /* Number input +/- buttons */
-    .stNumberInput button {{
-        background: {c['bg_tertiary']} !important;
-        color: {c['text_primary']} !important;
-        border-color: {c['input_border']} !important;
-    }}
-    .stNumberInput button:hover {{
-        background: {c['border_color']} !important;
-    }}
-    .stNumberInput button div {{
-        color: {c['text_primary']} !important;
-    }}
-    
-    /* Date input */
-    .stDateInput > div {{
-        background: {c['input_bg']} !important;
-    }}
-    .stDateInput > div > div {{
-        background: {c['input_bg']} !important;
-    }}
-    .stDateInput input {{
-        background: {c['input_bg']} !important;
-        color: {c['text_primary']} !important;
-        -webkit-text-fill-color: {c['text_primary']} !important;
-    }}
-    
-    /* Calendar popup */
-    div[data-baseweb="popover"] [data-baseweb="calendar"],
-    div[data-baseweb="calendar"] {{
-        background: {c['bg_secondary']} !important;
-    }}
-    div[data-baseweb="calendar"] * {{
-        color: {c['text_primary']} !important;
-    }}
-    div[data-baseweb="calendar"] button {{
-        background: transparent !important;
-        color: {c['text_primary']} !important;
-    }}
-    div[data-baseweb="calendar"] button:hover {{
-        background: {c['bg_tertiary']} !important;
-    }}
-    div[data-baseweb="calendar"] button[aria-selected="true"] {{
-        background: #3498db !important;
-        color: white !important;
-    }}
-    
-    /* Selectbox dropdown options */
-    ul[role="listbox"],
-    div[data-baseweb="popover"] ul {{
-        background: {c['bg_secondary']} !important;
-        border: 1px solid {c['border_color']} !important;
-    }}
-    li[role="option"] {{
-        background: {c['bg_secondary']} !important;
-        color: {c['text_primary']} !important;
-    }}
-    li[role="option"]:hover {{
-        background: {c['bg_tertiary']} !important;
-        color: {c['text_primary']} !important;
-    }}
     </style>
-    
-    <script>
-    function removeArrowText() {{
-        const walker = document.createTreeWalker(
-            document.body, NodeFilter.SHOW_TEXT, null, false
-        );
-        const nodesToRemove = [];
-        let node;
-        while (node = walker.nextNode()) {{
-            const text = node.nodeValue;
-            if (text && (
-                text.includes('_arrow_right') || 
-                text.includes('_arrow_left') ||
-                text.includes('keyboard_double_arrow') ||
-                text.includes('keyboard_arrow')
-            )) {{
-                nodesToRemove.push(node);
-            }}
-        }}
-        nodesToRemove.forEach(n => n.nodeValue = '');
-    }}
-    removeArrowText();
-    setInterval(removeArrowText, 100);
-    const observer = new MutationObserver(removeArrowText);
-    observer.observe(document.body, {{ childList: true, subtree: true, characterData: true }});
-    </script>
     """
     st.markdown(css, unsafe_allow_html=True)
 
