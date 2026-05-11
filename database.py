@@ -231,6 +231,14 @@ def get_upcoming_launches(days_ahead=4):
 
 
 def get_discrepancies(stores_df, shipments_df):
+    """
+    Detect discrepancies between Shipped and Received quantities.
+    Logic:
+    - For LAUNCHED stores: any difference (shipped vs received) is a discrepancy
+    - For NON-LAUNCHED stores: only show if they entered some received data
+    - Excess: received > shipped
+    - Shortage: received < shipped (including received = 0 when shipped > 0)
+    """
     discrepancies = []
 
     if stores_df.empty:
@@ -247,7 +255,17 @@ def get_discrepancies(stores_df, shipments_df):
         r40 = int(store.get('received_40d', 0) or 0)
         r60 = int(store.get('received_60d', 0) or 0)
 
-        if r30 == 0 and r40 == 0 and r60 == 0:
+        is_launched = bool(store.get('is_launched', False))
+        has_any_received = (r30 > 0 or r40 > 0 or r60 > 0)
+        has_any_shipped = (s30 > 0 or s40 > 0 or s60 > 0)
+
+        # Skip stores that have NO shipments AND NO received data (nothing to compare)
+        if not has_any_shipped and not has_any_received:
+            continue
+
+        # For non-launched stores with no received data yet:
+        # Don't flag as discrepancy (data not entered yet)
+        if not is_launched and not has_any_received:
             continue
 
         diff_30 = r30 - s30
@@ -259,6 +277,7 @@ def get_discrepancies(stores_df, shipments_df):
                 'store_id': store['id'],
                 'name': store['name'],
                 'location': store['location'] or 'N/A',
+                'is_launched': is_launched,
                 'shipped_30d': s30,
                 'received_30d': r30,
                 'diff_30d': diff_30,
@@ -271,7 +290,6 @@ def get_discrepancies(stores_df, shipments_df):
             })
 
     return pd.DataFrame(discrepancies)
-
 
 # ==================== SHIPMENTS ====================
 
