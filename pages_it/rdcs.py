@@ -118,91 +118,85 @@ def render_executive_kpis(rdcs_df):
 
     overall_pct = (total_ship_all / total_req_all * 100) if total_req_all > 0 else 0
 
-    st.markdown("""
-    <style>
-    .exec-kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 14px;
-        margin-bottom: 20px;
-    }
-    .exec-kpi {
-        background: linear-gradient(135deg, rgba(52,152,219,0.08), rgba(52,152,219,0.02));
-        border-left: 4px solid #3498db;
-        padding: 18px 20px;
-        border-radius: 12px;
-        position: relative;
-        overflow: hidden;
-        transition: transform 0.2s;
-    }
-    .exec-kpi:hover { transform: translateY(-3px); }
-    .exec-kpi-label {
-        font-size: 0.78rem;
-        color: #7f8c8d;
-        text-transform: uppercase;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        margin-bottom: 6px;
-    }
-    .exec-kpi-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #2c3e50;
-        line-height: 1.1;
-    }
-    .exec-kpi-sub {
-        font-size: 0.8rem;
-        color: #95a5a6;
-        margin-top: 4px;
-    }
-    .kpi-green { border-left-color: #27ae60; background: linear-gradient(135deg, rgba(39,174,96,0.08), rgba(39,174,96,0.02)); }
-    .kpi-orange { border-left-color: #f39c12; background: linear-gradient(135deg, rgba(243,156,18,0.08), rgba(243,156,18,0.02)); }
-    .kpi-red { border-left-color: #e74c3c; background: linear-gradient(135deg, rgba(231,76,60,0.08), rgba(231,76,60,0.02)); }
-    .kpi-purple { border-left-color: #9b59b6; background: linear-gradient(135deg, rgba(155,89,182,0.08), rgba(155,89,182,0.02)); }
-    </style>
-    """, unsafe_allow_html=True)
-
-    overall_color_class = "kpi-green" if overall_pct >= 75 else ("kpi-orange" if overall_pct >= 50 else "kpi-red")
-
-    st.markdown(f"""
-    <div class="exec-kpi-grid">
-        <div class="exec-kpi">
-            <div class="exec-kpi-label">🏢 Total RDCs</div>
-            <div class="exec-kpi-value">{total_rdcs}</div>
-            <div class="exec-kpi-sub">In network</div>
-        </div>
-        <div class="exec-kpi kpi-purple">
-            <div class="exec-kpi-label">📋 Total Required</div>
-            <div class="exec-kpi-value">{total_req_all:,}</div>
-            <div class="exec-kpi-sub">Equipment units</div>
-        </div>
-        <div class="exec-kpi kpi-green">
-            <div class="exec-kpi-label">🚚 Total Shipped</div>
-            <div class="exec-kpi-value">{total_ship_all:,}</div>
-            <div class="exec-kpi-sub">Delivered to RDCs</div>
-        </div>
-        <div class="exec-kpi {overall_color_class}">
-            <div class="exec-kpi-label">📊 Overall Coverage</div>
-            <div class="exec-kpi-value">{overall_pct:.0f}%</div>
-            <div class="exec-kpi-sub">Network readiness</div>
-        </div>
-        <div class="exec-kpi kpi-green">
-            <div class="exec-kpi-label">✅ Ready RDCs</div>
-            <div class="exec-kpi-value">{ready_count}</div>
-            <div class="exec-kpi-sub">100% covered</div>
-        </div>
-        <div class="exec-kpi kpi-red">
-            <div class="exec-kpi-label">🔴 Critical RDCs</div>
-            <div class="exec-kpi-value">{critical_count}</div>
-            <div class="exec-kpi-sub">Below 50%</div>
-        </div>
-        <div class="exec-kpi kpi-orange">
-            <div class="exec-kpi-label">🚀 Upcoming Launches</div>
-            <div class="exec-kpi-value">{upcoming_launches}</div>
-            <div class="exec-kpi-sub">Next 7 days</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Use Streamlit columns instead of HTML grid (more reliable)
+    cols = st.columns(4)
+    
+    with cols[0]:
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,rgba(52,152,219,0.1),rgba(52,152,219,0.02));border-left:4px solid #3498db;padding:16px;border-radius:10px;">'
+            f'<div style="font-size:0.75rem;color:#7f8c8d;text-transform:uppercase;font-weight:600;">🏢 Total RDCs</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;color:#2c3e50;">{total_rdcs}</div>'
+            f'<div style="font-size:0.75rem;color:#95a5a6;">In network</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    
+    with cols[1]:
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,rgba(155,89,182,0.1),rgba(155,89,182,0.02));border-left:4px solid #9b59b6;padding:16px;border-radius:10px;">'
+            f'<div style="font-size:0.75rem;color:#7f8c8d;text-transform:uppercase;font-weight:600;">📋 Total Required</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;color:#2c3e50;">{total_req_all:,}</div>'
+            f'<div style="font-size:0.75rem;color:#95a5a6;">Equipment units</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    
+    with cols[2]:
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,rgba(39,174,96,0.1),rgba(39,174,96,0.02));border-left:4px solid #27ae60;padding:16px;border-radius:10px;">'
+            f'<div style="font-size:0.75rem;color:#7f8c8d;text-transform:uppercase;font-weight:600;">🚚 Total Shipped</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;color:#2c3e50;">{total_ship_all:,}</div>'
+            f'<div style="font-size:0.75rem;color:#95a5a6;">Delivered</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    
+    with cols[3]:
+        overall_color = "#27ae60" if overall_pct >= 75 else ("#f39c12" if overall_pct >= 50 else "#e74c3c")
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,{overall_color}1a,{overall_color}05);border-left:4px solid {overall_color};padding:16px;border-radius:10px;">'
+            f'<div style="font-size:0.75rem;color:#7f8c8d;text-transform:uppercase;font-weight:600;">📊 Overall Coverage</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;color:{overall_color};">{overall_pct:.0f}%</div>'
+            f'<div style="font-size:0.75rem;color:#95a5a6;">Network readiness</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    
+    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+    
+    cols2 = st.columns(3)
+    
+    with cols2[0]:
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,rgba(39,174,96,0.1),rgba(39,174,96,0.02));border-left:4px solid #27ae60;padding:16px;border-radius:10px;">'
+            f'<div style="font-size:0.75rem;color:#7f8c8d;text-transform:uppercase;font-weight:600;">✅ Ready RDCs</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;color:#27ae60;">{ready_count}</div>'
+            f'<div style="font-size:0.75rem;color:#95a5a6;">100% covered</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    
+    with cols2[1]:
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,rgba(231,76,60,0.1),rgba(231,76,60,0.02));border-left:4px solid #e74c3c;padding:16px;border-radius:10px;">'
+            f'<div style="font-size:0.75rem;color:#7f8c8d;text-transform:uppercase;font-weight:600;">🔴 Critical RDCs</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;color:#e74c3c;">{critical_count}</div>'
+            f'<div style="font-size:0.75rem;color:#95a5a6;">Below 50%</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    
+    with cols2[2]:
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,rgba(243,156,18,0.1),rgba(243,156,18,0.02));border-left:4px solid #f39c12;padding:16px;border-radius:10px;">'
+            f'<div style="font-size:0.75rem;color:#7f8c8d;text-transform:uppercase;font-weight:600;">🚀 Upcoming Launches</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;color:#f39c12;">{upcoming_launches}</div>'
+            f'<div style="font-size:0.75rem;color:#95a5a6;">Next 7 days</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    
+    st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
 
 
 # ============================================================
@@ -301,87 +295,60 @@ def render_executive_rdc_card(rdc):
             icon = "⚠️"
             row_color = "#f39c12"
 
-        item_pct = (ship / req * 100) if req > 0 else 0
-        equip_rows += f"""
-        <div style="display:flex; justify-content:space-between; align-items:center; 
-                    padding:6px 8px; margin:3px 0; background:rgba(0,0,0,0.02); border-radius:6px;
-                    border-left: 3px solid {row_color};">
-            <span style="font-size:0.85rem; color:#2c3e50; font-weight:500;">{icon} {item}</span>
-            <span style="font-size:0.85rem; font-weight:700; color:{row_color};">{ship}/{req}</span>
-        </div>
-        """
+        equip_rows += f'<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; margin:3px 0; background:rgba(0,0,0,0.02); border-radius:6px; border-left: 3px solid {row_color};"><span style="font-size:0.85rem; color:#2c3e50; font-weight:500;">{icon} {item}</span><span style="font-size:0.85rem; font-weight:700; color:{row_color};">{ship}/{req}</span></div>'
 
     if not equip_rows:
-        equip_rows = "<div style='color:#95a5a6; font-style:italic; padding:10px;'>No equipment requirements set</div>"
+        equip_rows = '<div style="color:#95a5a6; font-style:italic; padding:10px;">No equipment requirements set</div>'
 
-    # Card HTML
-    st.markdown(f"""
-    <div style="background:white; border-radius:14px; padding:18px; 
-                box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:14px;
-                border-top: 4px solid {status_color};">
-        
-        <!-- Header -->
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
-            <div>
-                <div style="font-size:1.15rem; font-weight:700; color:#2c3e50;">
-                    🏢 {rdc['name']}
-                </div>
-                <div style="font-size:0.82rem; color:#7f8c8d; margin-top:3px;">
-                    📍 {rdc.get('location') or 'No location'}
-                </div>
-            </div>
-            <div style="background:{status_color}; color:white; padding:4px 10px; 
-                        border-radius:12px; font-size:0.75rem; font-weight:600;">
-                {status_emoji} {status_label}
-            </div>
-        </div>
+    rdc_name = rdc['name']
+    rdc_location = rdc.get('location') or 'No location'
+    pct_width = min(m['pct'], 100)
 
-        <!-- Launch Date -->
-        <div style="background:rgba(0,0,0,0.03); padding:8px 12px; border-radius:8px; 
-                    margin-bottom:12px; border-left:3px solid {launch_color};">
-            <span style="font-size:0.85rem; color:#2c3e50;">
-                <b>{emoji} Launch:</b> {status_msg}
-            </span>
-        </div>
+    # Build full HTML as one line (no leading whitespace)
+    html = (
+        f'<div style="background:white; border-radius:14px; padding:18px; box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:14px; border-top: 4px solid {status_color};">'
+        f'<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">'
+        f'<div>'
+        f'<div style="font-size:1.15rem; font-weight:700; color:#2c3e50;">🏢 {rdc_name}</div>'
+        f'<div style="font-size:0.82rem; color:#7f8c8d; margin-top:3px;">📍 {rdc_location}</div>'
+        f'</div>'
+        f'<div style="background:{status_color}; color:white; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:600;">{status_emoji} {status_label}</div>'
+        f'</div>'
+        f'<div style="background:rgba(0,0,0,0.03); padding:8px 12px; border-radius:8px; margin-bottom:12px; border-left:3px solid {launch_color};">'
+        f'<span style="font-size:0.85rem; color:#2c3e50;"><b>{emoji} Launch:</b> {status_msg}</span>'
+        f'</div>'
+        f'<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:12px;">'
+        f'<div style="text-align:center; padding:8px; background:rgba(155,89,182,0.08); border-radius:8px;">'
+        f'<div style="font-size:0.7rem; color:#7f8c8d; text-transform:uppercase;">Required</div>'
+        f'<div style="font-size:1.3rem; font-weight:700; color:#9b59b6;">{m["total_req"]}</div>'
+        f'</div>'
+        f'<div style="text-align:center; padding:8px; background:rgba(39,174,96,0.08); border-radius:8px;">'
+        f'<div style="font-size:0.7rem; color:#7f8c8d; text-transform:uppercase;">Shipped</div>'
+        f'<div style="font-size:1.3rem; font-weight:700; color:#27ae60;">{m["total_ship"]}</div>'
+        f'</div>'
+        f'<div style="text-align:center; padding:8px; background:rgba(231,76,60,0.08); border-radius:8px;">'
+        f'<div style="font-size:0.7rem; color:#7f8c8d; text-transform:uppercase;">Pending</div>'
+        f'<div style="font-size:1.3rem; font-weight:700; color:#e74c3c;">{m["total_pending"]}</div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="margin-bottom:12px;">'
+        f'<div style="display:flex; justify-content:space-between; font-size:0.78rem; margin-bottom:4px;">'
+        f'<span style="color:#7f8c8d; font-weight:600;">Coverage</span>'
+        f'<span style="color:{status_color}; font-weight:700;">{m["pct"]:.0f}%</span>'
+        f'</div>'
+        f'<div style="background:#ecf0f1; border-radius:8px; height:10px; overflow:hidden;">'
+        f'<div style="width:{pct_width}%; height:100%; background:{status_color}; border-radius:8px;"></div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="margin-top:10px;">'
+        f'<div style="font-size:0.8rem; font-weight:600; color:#2c3e50; margin-bottom:6px;">📦 Equipment Breakdown</div>'
+        f'{equip_rows}'
+        f'</div>'
+        f'</div>'
+    )
 
-        <!-- Metrics -->
-        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:12px;">
-            <div style="text-align:center; padding:8px; background:rgba(155,89,182,0.08); border-radius:8px;">
-                <div style="font-size:0.7rem; color:#7f8c8d; text-transform:uppercase;">Required</div>
-                <div style="font-size:1.3rem; font-weight:700; color:#9b59b6;">{m['total_req']}</div>
-            </div>
-            <div style="text-align:center; padding:8px; background:rgba(39,174,96,0.08); border-radius:8px;">
-                <div style="font-size:0.7rem; color:#7f8c8d; text-transform:uppercase;">Shipped</div>
-                <div style="font-size:1.3rem; font-weight:700; color:#27ae60;">{m['total_ship']}</div>
-            </div>
-            <div style="text-align:center; padding:8px; background:rgba(231,76,60,0.08); border-radius:8px;">
-                <div style="font-size:0.7rem; color:#7f8c8d; text-transform:uppercase;">Pending</div>
-                <div style="font-size:1.3rem; font-weight:700; color:#e74c3c;">{m['total_pending']}</div>
-            </div>
-        </div>
+    st.markdown(html, unsafe_allow_html=True)
 
-        <!-- Progress Bar -->
-        <div style="margin-bottom:12px;">
-            <div style="display:flex; justify-content:space-between; font-size:0.78rem; margin-bottom:4px;">
-                <span style="color:#7f8c8d; font-weight:600;">Coverage</span>
-                <span style="color:{status_color}; font-weight:700;">{m['pct']:.0f}%</span>
-            </div>
-            <div style="background:#ecf0f1; border-radius:8px; height:10px; overflow:hidden;">
-                <div style="width:{min(m['pct'],100)}%; height:100%; 
-                            background: linear-gradient(90deg, {status_color}, {status_color}dd); 
-                            border-radius:8px; transition: width 0.5s;"></div>
-            </div>
-        </div>
-
-        <!-- Equipment Breakdown -->
-        <div style="margin-top:10px;">
-            <div style="font-size:0.8rem; font-weight:600; color:#2c3e50; margin-bottom:6px;">
-                📦 Equipment Breakdown
-            </div>
-            {equip_rows}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
 
 
 # ============================================================
