@@ -144,21 +144,50 @@ def load_css():
         background: linear-gradient(90deg, rgba(52, 152, 219, 0.3) 0%, rgba(52, 152, 219, 0.1) 100%);
         border-left: 3px solid #3498db;
     }}
-    [data-testid="stSidebar"] button {{
-        background: rgba(255,255,255,0.08) !important;
-        color: white !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
-        border-radius: 10px !important;
-        transition: all 0.3s ease;
-    }}
-    [data-testid="stSidebar"] button:hover {{
-        background: rgba(52, 152, 219, 0.3) !important;
-        border-color: #3498db !important;
-    }}
-    [data-testid="stSidebar"] button[kind="primary"] {{
-        background: linear-gradient(90deg, rgba(52, 152, 219, 0.4) 0%, rgba(52, 152, 219, 0.2) 100%) !important;
-        border-color: #3498db !important;
-    }}
+/* ===== SIDEBAR BUTTONS - FORCED DARK STYLE (both modes) ===== */
+[data-testid="stSidebar"] .stButton > button,
+[data-testid="stSidebar"] button[kind="secondary"],
+[data-testid="stSidebar"] button[kind="primary"],
+[data-testid="stSidebar"] button {{
+    background: rgba(255,255,255,0.08) !important;
+    background-color: rgba(255,255,255,0.08) !important;
+    color: white !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    border-radius: 10px !important;
+    transition: all 0.3s ease !important;
+    box-shadow: none !important;
+}}
+
+[data-testid="stSidebar"] .stButton > button *,
+[data-testid="stSidebar"] button * {{
+    color: white !important;
+}}
+
+[data-testid="stSidebar"] .stButton > button:hover,
+[data-testid="stSidebar"] button:hover {{
+    background: rgba(52, 152, 219, 0.3) !important;
+    background-color: rgba(52, 152, 219, 0.3) !important;
+    border-color: #3498db !important;
+    color: white !important;
+    transform: translateX(4px);
+}}
+
+[data-testid="stSidebar"] .stButton > button[kind="primary"],
+[data-testid="stSidebar"] button[kind="primary"] {{
+    background: linear-gradient(90deg, rgba(52, 152, 219, 0.5) 0%, rgba(52, 152, 219, 0.25) 100%) !important;
+    border-color: #3498db !important;
+    color: white !important;
+}}
+
+[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover,
+[data-testid="stSidebar"] button[kind="primary"]:hover {{
+    background: linear-gradient(90deg, rgba(52, 152, 219, 0.7) 0%, rgba(52, 152, 219, 0.4) 100%) !important;
+}}
+
+/* Override the global button styles inside sidebar */
+[data-testid="stSidebar"] .stButton > button {{
+    box-shadow: none !important;
+}}
     
     /* ===== HEADINGS ===== */
     h1 {{
