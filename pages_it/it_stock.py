@@ -94,49 +94,58 @@ def render():
     comp_df = pd.DataFrame(comparison_rows)
     st.dataframe(comp_df, use_container_width=True, hide_index=True)
 
-    # Update stock form
+ # Update stock form
     render_section_title("🔄 Update Stock")
+    
+    # Equipment selector OUTSIDE form (so current_val updates dynamically)
+    item = st.selectbox("Equipment Type", IT_EQUIPMENT_TYPES, key="it_stock_item_select")
+    current_val = int(stocks.get(item, 0)) if item else 0
+    
+    st.info(f"ℹ️ Current stock for **{item}**: **{current_val}**")
+    
     with st.form("update_it_stock", clear_on_submit=True):
         c1, c2 = st.columns([2, 1])
-        item = c1.selectbox("Equipment Type", IT_EQUIPMENT_TYPES, key="it_stock_item")
-        current_val = int(stocks.get(item, 0)) if item else 0
-        
-        st.info(f"ℹ️ Current stock for **{item}**: **{current_val}**")
+        c1.markdown(f"**Equipment:** {item}")
+        c1.markdown(f"**Current Qty:** {current_val}")
         
         new_qty = c2.number_input(
             "New Quantity",
             min_value=0,
             value=current_val,
-            step=1,
-            key=f"it_stock_qty_input"
+            step=1
+            # ← شيلنا الـ key عشان clear_on_submit يشتغل صح
         )
-        note = st.text_input("Note (optional)", key="it_stock_note")
+        note = st.text_input("Note (optional)")
 
         submitted = st.form_submit_button("🔄 Update Stock", use_container_width=True)
         
         if submitted:
-            # Debug info
-            st.write(f"🔧 Debug: Updating **{item}** from **{current_val}** to **{int(new_qty)}**")
+            new_qty_int = int(new_qty)
             
-            try:
-                update_it_stock(item, int(new_qty), note or 'Manual update')
-                st.success(f"✅ {item} stock updated to {int(new_qty)}")
-                
-                # Verify the update
-                from database_it import get_it_stock_dict
-                fresh_stocks = get_it_stock_dict()
-                actual = fresh_stocks.get(item, 0)
-                st.info(f"🔍 Verification: Database now shows **{actual}** for {item}")
-                
-                if actual == int(new_qty):
-                    st.success("✅ Update verified in database!")
-                else:
-                    st.error(f"❌ Update FAILED! Expected {int(new_qty)}, got {actual}")
-                
-                # Don't rerun yet - so we can see the debug info
-                st.button("🔄 Refresh Page", on_click=lambda: st.rerun())
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+            # Debug info
+            st.write(f"🔧 Debug: Updating **{item}** from **{current_val}** to **{new_qty_int}**")
+            
+            if new_qty_int == current_val:
+                st.warning("⚠️ New quantity is the same as current. No change made.")
+            else:
+                try:
+                    result = update_it_stock(item, new_qty_int, note or 'Manual update')
+                    
+                    # Verify the update
+                    fresh_stocks = get_it_stock_dict()
+                    actual = fresh_stocks.get(item, 0)
+                    
+                    if actual == new_qty_int:
+                        st.success(f"✅ {item} stock updated: {current_val} → {new_qty_int}")
+                        st.info(f"🔍 Verification: Database now shows **{actual}**")
+                    else:
+                        st.error(f"❌ Update FAILED! Expected {new_qty_int}, but database shows {actual}")
+                        st.warning("⚠️ Check `update_it_stock` function in database_it.py")
+                    
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
     # Stock history
     render_section_title("📜 Stock History")
