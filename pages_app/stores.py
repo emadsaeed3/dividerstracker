@@ -206,6 +206,13 @@ def render_discrepancy_card(row, kind):
     color = '#e67e22' if kind == 'excess' else '#e74c3c'
     icon = '📈' if kind == 'excess' else '📉'
 
+    # Launched badge
+    launched_badge = ''
+    if row.get('is_launched', False):
+        launched_badge = ' <span style="background:#27ae60; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">✅ LAUNCHED</span>'
+    else:
+        launched_badge = ' <span style="background:#3498db; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">📅 UPCOMING</span>'
+
     def diff_html(label, shipped, received, diff, dcolor):
         if diff == 0:
             return (
@@ -237,6 +244,7 @@ def render_discrepancy_card(row, kind):
         '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap;">'
         '<div>'
         '<span style="font-weight:700; font-size:1.05rem;">' + icon + ' 🏪 ' + str(row['name']) + '</span>'
+        + launched_badge +
         '<span style="opacity:0.7; font-size:0.85rem;"> — 📍 ' + str(row['location']) + '</span>'
         '</div>'
         '</div>'
@@ -280,7 +288,11 @@ def render_discrepancy_section(stores_df, shipments_df):
     st.markdown(
         '<div style="background: rgba(243, 156, 18, 0.1); padding: 12px 18px; border-radius: 10px; '
         'border-left: 4px solid #f39c12; margin-bottom: 16px; font-size:0.9rem;">'
-        '💡 These stores have differences between what was shipped and what was actually received.'
+        '💡 These stores have differences between what was shipped and what was actually received.<br>'
+        '<span style="font-size:0.82rem; opacity:0.85;">'
+        '✅ <b>LAUNCHED</b> = store is already operational | '
+        '📅 <b>UPCOMING</b> = store entered receipt data before launch'
+        '</span>'
         '</div>',
         unsafe_allow_html=True
     )
