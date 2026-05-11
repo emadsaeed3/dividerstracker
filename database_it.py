@@ -396,3 +396,222 @@ def delete_it_shipment(shipment_id):
         pass
 
     supabase.table('it_shipments').delete().eq('id', shipment_id).execute()
+
+
+# ============================================================
+# IT Purchase Orders
+# ============================================================
+
+IT_PO_STATUSES = [
+    'Draft',
+    'Sent to Vendor',
+    'Confirmed',
+    'In Production',
+    'Shipped',
+    'Received',
+    'Cancelled'
+]
+
+
+def get_it_purchase_orders(status_filter=None):
+    """Get all IT purchase orders, optionally filtered by status."""
+    supabase = get_client()
+    try:
+        query = supabase.table('it_purchase_orders').select('*')
+        
+        if status_filter:
+            if isinstance(status_filter, list):
+                query = query.in_('status', status_filter)
+            else:
+                query = query.eq('status', status_filter)
+        
+        response = query.order('po_date', desc=True).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        print(f"Error fetching IT POs: {e}")
+        return []
+
+
+def get_it_po_by_id(po_id):
+    """Get a single IT PO by ID."""
+    supabase = get_client()
+    try:
+        response = supabase.table('it_purchase_orders').select('*').eq('id', po_id).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        print(f"Error fetching IT PO {po_id}: {e}")
+        return None
+
+
+def add_it_purchase_order(po_number, vendor_name, po_date, expected_date,
+                          equipment_type, quantity, status='Draft', notes=None):
+    """Add a new IT purchase order."""
+    supabase = get_client()
+    try:
+        data = {
+            'po_number': po_number,
+            'vendor_name': vendor_name,
+            'po_date': str(po_date) if po_date else None,
+            'expected_date': str(expected_date) if expected_date else None,
+            'equipment_type': equipment_type,
+            'quantity': int(quantity) if quantity else 0,
+            'status': status,
+            'notes': notes
+        }
+        response = supabase.table('it_purchase_orders').insert(data).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        print(f"Error adding IT PO: {e}")
+        return None
+
+
+def update_it_purchase_order(po_id, po_number=None, vendor_name=None, po_date=None,
+                             expected_date=None, equipment_type=None, quantity=None,
+                             status=None, notes=None):
+    """Update an existing IT purchase order. Cannot update if status is 'Received'."""
+    supabase = get_client()
+    try:
+        # Check if PO is already received
+        existing = get_it_po_by_id(po_id)
+        if not existing:
+            return None
+        if existing.get('status') == 'Received':
+            print(f"Cannot update IT PO {po_id}: already Received")
+            return None
+        
+        update_data = {'updated_at': datetime.now().isoformat()}
+        
+        if po_number is not None:
+            update_data['po_number'] = po_number
+        if vendor_name is not None:
+            update_data['vendor_name'] = vendor_name
+        if po_date is not None:
+            update_data['po_date'] = str(po_date)
+        if expected_date is not None:
+            update_data['expected_date'] = str(expected_date) if expected_date else None
+        if equipment_type is not None:
+            update_data['equipment_type'] = equipment_type
+        if quantity is not None:
+            update_data['quantity'] = int(quantity)
+        if status is not None:
+            update_data['status'] = status
+        if notes is not None:
+            update_data['notes'] = notes
+        
+        response = supabase.table('it_purchase_orders').update(update_data).eq('id', po_id).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        print(f"Error updating IT PO {po_id}: {e}")
+        return None
+
+
+def receive_it_purchase_order(po_id):
+    """
+    Mark IT PO as Received:
+    1. Add quantity to it_equipment_stock
+    2. Log entry in it_stock_history
+    3. Update PO status to 'Received' + set received_date
+    """
+    supabase = get_client()
+    try:
+        po = get_it_po_by_id(po_id)
+        if not po:
+            return False, "PO not found"
+        
+        if po.get('status') == 'Received':
+            return False, "PO is already received"
+        
+        equipment_type = po['equipment_type']
+        quantity = int(po.get('quantity', 0))
+        
+        if quantity <= 0:
+            return False, "PO quantity must be greater than 0"
+        
+        # 1. Get current stock
+        stock_resp = supabase.table('it_equipment_stock').select('*').eq('equipment_type', equipment_type).execute()
+        
+        if stock_resp.data:
+            current_qty = int(stock_resp.data[0].get('quantity', 0))
+            new_qty = current_qty + quantity
+            # Update stock
+            try:
+                supabase.table('it_equipment_stock').update({
+                    'quantity': new_qty,
+                    'last_updated': datetime.now().isoformat()
+                }).eq('equipment_type', equipment_type).execute()
+            except Exception:
+                # Fallback if last_updated column missing
+                supabase.table('it_equipment_stock').update({
+                    'quantity': new_qty
+                }).eq('equipment_type', equipment_type).execute()
+        else:
+            # Insert new stock row
+            current_qty = 0
+            new_qty = quantity
+            try:
+                supabase.table('it_equipment_stock').insert({
+                    'equipment_type': equipment_type,
+                    'quantity': new_qty,
+                    'last_updated': datetime.now().isoformat()
+                }).execute()
+            except Exception:
+                supabase.table('it_equipment_stock').insert({
+                    'equipment_type': equipment_type,
+                    'quantity': new_qty
+                }).execute()
+        
+        # 2. Log in history
+        try:
+            supabase.table('it_stock_history').insert({
+                'equipment_type': equipment_type,
+                'old_qty': current_qty,
+                'new_qty': new_qty,
+                'change': quantity,
+                'note': f"Received PO #{po.get('po_number', po_id)} from {po.get('vendor_name', 'N/A')}",
+                'date': datetime.now().isoformat()
+            }).execute()
+        except Exception as e:
+            print(f"Warning: failed to log stock history: {e}")
+        
+        # 3. Update PO
+        supabase.table('it_purchase_orders').update({
+            'status': 'Received',
+            'received_date': datetime.now().date().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', po_id).execute()
+        
+        return True, f"PO received: +{quantity} {equipment_type}"
+    except Exception as e:
+        print(f"Error receiving IT PO {po_id}: {e}")
+        return False, str(e)
+
+
+def delete_it_purchase_order(po_id):
+    """Delete an IT purchase order. Cannot delete if status is 'Received'."""
+    supabase = get_client()
+    try:
+        existing = get_it_po_by_id(po_id)
+        if not existing:
+            return False, "PO not found"
+        if existing.get('status') == 'Received':
+            return False, "Cannot delete a Received PO"
+        
+        supabase.table('it_purchase_orders').delete().eq('id', po_id).execute()
+        return True, "PO deleted successfully"
+    except Exception as e:
+        print(f"Error deleting IT PO {po_id}: {e}")
+        return False, str(e)
+
+
+def get_it_pending_pos():
+    """Get all IT POs that are not Received or Cancelled (for alerts/dashboard)."""
+    supabase = get_client()
+    try:
+        response = supabase.table('it_purchase_orders').select('*').not_.in_(
+            'status', ['Received', 'Cancelled']
+        ).order('expected_date', desc=False).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        print(f"Error fetching pending IT POs: {e}")
+        return []
+
