@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date, datetime, timedelta
+from coverage_helper import calculate_coverage
 from database import (
     get_threshold, get_stocks_dict, get_stores, get_shipments,
     get_upcoming_launches, get_magnet_stock, get_magnet_status_dict,
@@ -447,3 +448,59 @@ def render():
         render_delivery_status_trend(shipments_df)
     with c2:
         render_launches_timeline(stores_df)
+def render_coverage_summary():
+    """Quick coverage summary for dashboard"""
+    coverage = calculate_coverage()
+    demand = coverage['demand']
+
+    if demand['stores_count'] == 0:
+        return  # Don't show if no demand
+
+    cov = coverage['coverage']
+    short = coverage['shortages']
+
+    if cov['overall_status'] == 'covered':
+        color = '#27ae60'
+        bg = 'rgba(39,174,96,0.1)'
+        icon = '✅'
+        msg = f"All {demand['stores_count']} stores can be fully covered with current supply!"
+    elif cov['overall_status'] == 'partial':
+        color = '#f39c12'
+        bg = 'rgba(243,156,18,0.1)'
+        icon = '⚠️'
+        msg = f"Partial coverage for {demand['stores_count']} stores. Shortage: {short['total_shortage']} dividers."
+    else:
+        color = '#e74c3c'
+        bg = 'rgba(231,76,60,0.1)'
+        icon = '🚨'
+        msg = f"Critical! {demand['stores_count']} stores need supply. Shortage: {short['total_shortage']} dividers."
+
+    st.markdown(
+        f'<div style="background:{bg}; padding:16px 20px; border-radius:12px; '
+        f'border-left:5px solid {color}; margin-bottom:16px;">'
+        f'<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">'
+        f'<div>'
+        f'<div style="font-size:1rem; font-weight:700;">{icon} Coverage Status</div>'
+        f'<div style="font-size:0.88rem; opacity:0.9; margin-top:4px;">{msg}</div>'
+        f'</div>'
+        f'<div style="display:flex; gap:12px;">'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:0.7rem; opacity:0.7;">🔵 30D</div>'
+        f'<div style="font-size:1.1rem; font-weight:700;">{cov["pct_30d"]:.0f}%</div>'
+        f'</div>'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:0.7rem; opacity:0.7;">🟠 40D</div>'
+        f'<div style="font-size:1.1rem; font-weight:700;">{cov["pct_40d"]:.0f}%</div>'
+        f'</div>'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:0.7rem; opacity:0.7;">🟣 60D</div>'
+        f'<div style="font-size:1.1rem; font-weight:700;">{cov["pct_60d"]:.0f}%</div>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="font-size:0.78rem; opacity:0.8; margin-top:8px;">'
+        f'💡 Visit <b>Vendor Stock → Coverage Analysis</b> for full details'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
