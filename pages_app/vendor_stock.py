@@ -4,6 +4,7 @@ Vendor Stock Management with Tabs:
 - Purchase Orders
 - History
 """
+import math
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
@@ -12,9 +13,68 @@ from database import (
     get_stock_history, clear_stock_history,
     get_purchase_orders, get_po_by_id, add_purchase_order,
     update_purchase_order, receive_purchase_order, delete_purchase_order,
-    get_pending_pos, PO_STATUSES
+    get_pending_pos, PO_STATUSES,
+    get_magnet_stock
 )
 from components import render_section_title, render_stat_card
+
+
+# ==================== MAGNET CALCULATION HELPERS ====================
+
+def calculate_strips_needed(total_dividers):
+    """
+    Optimal strips calculation with cutting strategy.
+    
+    Logic:
+    - 1 strip = 3 squares + 1 rectangle
+    - 1 square can be cut into 2 rectangles
+    - 1 divider = 2 squares + 1 rectangle
+    
+    Formula: strips = ceil(5 * dividers / 7)
+    Saves ~28% vs naive 1:1 method.
+    """
+    if total_dividers <= 0:
+        return 0
+    return math.ceil(5 * total_dividers / 7)
+
+
+def render_magnet_warning(q30, q40, q60, context_label="this PO"):
+    """Show magnet availability warning for a PO quantity"""
+    total_dividers = q30 + q40 + q60
+    if total_dividers == 0:
+        return
+
+    strips_available = get_magnet_stock()
+    strips_needed = calculate_strips_needed(total_dividers)
+
+    if strips_needed <= strips_available:
+        remaining = strips_available - strips_needed
+        st.markdown(
+            f'<div style="background:rgba(39,174,96,0.1); padding:10px 14px; border-radius:8px; '
+            f'border-left:4px solid #27ae60; margin:8px 0; font-size:0.88rem;">'
+            f'🧲 <b>Magnet Check:</b> {context_label} needs <b>{strips_needed}</b> strips '
+            f'for <b>{total_dividers}</b> dividers. '
+            f'Available: <b>{strips_available}</b> ✅ '
+            f'<span style="opacity:0.8;">(Surplus: {remaining})</span><br>'
+            f'<span style="font-size:0.78rem; opacity:0.75;">'
+            f'✂️ Optimized: cutting excess squares into rectangles (saves ~28%)'
+            f'</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        shortage = strips_needed - strips_available
+        st.markdown(
+            f'<div style="background:rgba(231,76,60,0.1); padding:10px 14px; border-radius:8px; '
+            f'border-left:4px solid #e74c3c; margin:8px 0; font-size:0.88rem;">'
+            f'🚨 <b>Magnet Shortage Alert!</b><br>'
+            f'• {context_label}: <b>{total_dividers}</b> dividers<br>'
+            f'• Strips needed (optimized): <b>{strips_needed}</b><br>'
+            f'• Available at vendor: <b>{strips_available}</b><br>'
+            f'• <span style="color:#e74c3c;"><b>⚠️ Need to order: {shortage} more strips</b></span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
 
 # ==================== TAB 1: CURRENT STOCK ====================
@@ -36,7 +96,6 @@ def render_current_stock_tab():
     with c4:
         render_stat_card("Total Stock", total_stock, "card-stores", "bi-boxes")
 
-    # Low stock warnings
     for dtype in ['30D', '40D', '60D']:
         stock = stocks.get(dtype, 0)
         if stock == 0:
@@ -122,7 +181,9 @@ def render_po_card(po):
     q60 = int(po.get('qty_60d', 0) or 0)
     total = q30 + q40 + q60
 
-    # Days status
+    # Magnet info on card
+    strips_for_this_po = calculate_strips_needed(total)
+
     days_info = ''
     if expected and status not in ('Received', 'Cancelled'):
         try:
@@ -161,17 +222,17 @@ def render_po_card(po):
                 <div><b>Expected:</b> {fmt_date(expected)}</div>
                 <div><b>Received:</b> {fmt_date(received)}</div>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:0.88rem;">
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;font-size:0.88rem;">
                 <div>📘 <b>30D:</b> {q30}</div>
                 <div>📙 <b>40D:</b> {q40}</div>
                 <div>📕 <b>60D:</b> {q60}</div>
                 <div>📦 <b>Total:</b> {total}</div>
+                <div>🧲 <b>Strips:</b> {strips_for_this_po}</div>
             </div>
             {f'<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);font-size:0.85rem;color:#bdc3c7;"><b>Notes:</b> {notes}</div>' if notes else ''}
         </div>
         """, unsafe_allow_html=True)
 
-        # Actions
         c1, c2, c3, c4 = st.columns([1, 1, 1, 3])
 
         with c1:
@@ -196,7 +257,6 @@ def render_po_card(po):
                     st.session_state[f'confirm_del_po_{po_id}'] = True
                     st.rerun()
 
-        # Confirm delete
         if st.session_state.get(f'confirm_del_po_{po_id}'):
             st.warning(f"⚠️ Delete PO #{po_num}?")
             cc1, cc2 = st.columns(2)
@@ -211,7 +271,6 @@ def render_po_card(po):
                 st.session_state.pop(f'confirm_del_po_{po_id}', None)
                 st.rerun()
 
-        # Edit form
         if st.session_state.get(f'editing_po_{po_id}'):
             render_edit_po_form(po)
 
@@ -248,7 +307,10 @@ def render_edit_po_form(po):
         q40 = c2.number_input("40D Qty", min_value=0, value=int(po.get('qty_40d', 0) or 0), step=1)
         q60 = c3.number_input("60D Qty", min_value=0, value=int(po.get('qty_60d', 0) or 0), step=1)
 
-        # Status (exclude Received - only via Receive button)
+        # 🧲 Magnet warning
+        if q30 + q40 + q60 > 0:
+            render_magnet_warning(q30, q40, q60, f"PO #{po.get('po_number')}")
+
         editable_statuses = [s for s in PO_STATUSES if s != 'Received']
         current_status = po.get('status', 'Draft')
         if current_status not in editable_statuses:
@@ -298,6 +360,10 @@ def render_add_po_form():
             q40 = c2.number_input("40D Qty", min_value=0, value=0, step=1)
             q60 = c3.number_input("60D Qty", min_value=0, value=0, step=1)
 
+            # 🧲 Magnet warning (live)
+            if q30 + q40 + q60 > 0:
+                render_magnet_warning(q30, q40, q60, "This new PO")
+
             status = st.selectbox("Initial Status", ['Draft', 'Sent to Vendor', 'Confirmed'], index=0)
 
             notes = st.text_area("Notes", placeholder="Any additional info...", height=80)
@@ -313,7 +379,7 @@ def render_add_po_form():
                     return
 
                 result = add_purchase_order(po_number, vendor, po_date_input, expected_input,
-                                           q30, q40, q60, status, notes)
+                                            q30, q40, q60, status, notes)
                 if result:
                     st.success(f"✅ PO #{po_number} created!")
                     st.rerun()
@@ -324,7 +390,6 @@ def render_add_po_form():
 def render_purchase_orders_tab():
     render_section_title("📋 Purchase Orders")
 
-    # Stats
     all_pos = get_purchase_orders()
     pending = get_pending_pos()
 
@@ -347,26 +412,22 @@ def render_purchase_orders_tab():
 
     st.markdown("---")
 
-    # Add new PO
     render_add_po_form()
 
     st.markdown("---")
 
-    # Filter
     c1, c2 = st.columns([2, 1])
     with c1:
         search = st.text_input("🔍 Search PO Number or Vendor", placeholder="Type to filter...")
     with c2:
         status_filter = st.selectbox("Filter by Status", ['All'] + PO_STATUSES)
 
-    # Display POs
     df = all_pos.copy() if not all_pos.empty else pd.DataFrame()
 
     if df.empty:
         st.info("📭 No purchase orders yet. Create your first PO above!")
         return
 
-    # Apply filters
     if status_filter != 'All':
         df = df[df['status'] == status_filter]
 
@@ -419,7 +480,6 @@ def render_history_tab():
         st.info("📭 No stock history yet")
         return
 
-    # Format display
     display = history.copy()
     if 'date' in display.columns:
         display['date'] = pd.to_datetime(display['date']).dt.strftime('%d %b %Y %H:%M')
