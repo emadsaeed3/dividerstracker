@@ -2,8 +2,10 @@
 Vendor Stock Management with Tabs:
 - Current Stock
 - Purchase Orders
+- Coverage Analysis (NEW)
 - History
 """
+import io
 import math
 import streamlit as st
 import pandas as pd
@@ -17,29 +19,15 @@ from database import (
     get_magnet_stock
 )
 from components import render_section_title, render_stat_card
+from coverage_helper import (
+    calculate_strips_needed, calculate_coverage,
+    allocate_supply_to_stores
+)
 
 
-# ==================== MAGNET CALCULATION HELPERS ====================
-
-def calculate_strips_needed(total_dividers):
-    """
-    Optimal strips calculation with cutting strategy.
-    
-    Logic:
-    - 1 strip = 3 squares + 1 rectangle
-    - 1 square can be cut into 2 rectangles
-    - 1 divider = 2 squares + 1 rectangle
-    
-    Formula: strips = ceil(5 * dividers / 7)
-    Saves ~28% vs naive 1:1 method.
-    """
-    if total_dividers <= 0:
-        return 0
-    return math.ceil(5 * total_dividers / 7)
-
+# ==================== MAGNET WARNING ====================
 
 def render_magnet_warning(q30, q40, q60, context_label="this PO"):
-    """Show magnet availability warning for a PO quantity"""
     total_dividers = q30 + q40 + q60
     if total_dividers == 0:
         return
@@ -75,6 +63,84 @@ def render_magnet_warning(q30, q40, q60, context_label="this PO"):
             f'</div>',
             unsafe_allow_html=True
         )
+
+
+# ==================== PO COVERAGE WIDGET ====================
+
+def render_po_coverage_widget(q30, q40, q60, context="this new PO"):
+    """Mini coverage widget for use in PO forms"""
+    if q30 + q40 + q60 == 0:
+        return
+
+    extra_po = {'qty_30d': q30, 'qty_40d': q40, 'qty_60d': q60}
+
+    # Calculate WITHOUT this PO
+    cov_without = calculate_coverage(extra_po=None)
+    # Calculate WITH this PO
+    cov_with = calculate_coverage(extra_po=extra_po)
+
+    demand = cov_with['demand']
+
+    if demand['total'] == 0:
+        st.markdown(
+            '<div style="background:rgba(52,152,219,0.1); padding:10px 14px; border-radius:8px; '
+            'border-left:4px solid #3498db; margin:8px 0; font-size:0.88rem;">'
+            '📊 <b>Coverage:</b> No upcoming or under-shipped stores currently. '
+            'This PO will go into stock.'
+            '</div>',
+            unsafe_allow_html=True
+        )
+        return
+
+    # Compare before/after
+    before_short = cov_without['shortages']['total_shortage']
+    after_short = cov_with['shortages']['total_shortage']
+    improvement = before_short - after_short
+
+    if after_short == 0:
+        bg = 'rgba(39,174,96,0.1)'
+        border = '#27ae60'
+        icon = '✅'
+        verdict = f'<b>This PO will FULLY cover all {demand["stores_count"]} stores!</b>'
+    elif improvement > 0:
+        bg = 'rgba(243,156,18,0.1)'
+        border = '#f39c12'
+        icon = '⚠️'
+        verdict = (
+            f'<b>This PO will partially help:</b> '
+            f'reduces shortage by <b>{improvement}</b> dividers '
+            f'(still short: <b>{after_short}</b>)'
+        )
+    else:
+        bg = 'rgba(231,76,60,0.1)'
+        border = '#e74c3c'
+        icon = '🚨'
+        verdict = f'<b>Even with this PO, still short {after_short} dividers!</b>'
+
+    cov30 = cov_with['coverage']['pct_30d']
+    cov40 = cov_with['coverage']['pct_40d']
+    cov60 = cov_with['coverage']['pct_60d']
+
+    st.markdown(
+        f'<div style="background:{bg}; padding:12px 16px; border-radius:10px; '
+        f'border-left:4px solid {border}; margin:8px 0; font-size:0.88rem;">'
+        f'<div style="font-weight:700; margin-bottom:8px;">'
+        f'{icon} Coverage Analysis (after adding {context})'
+        f'</div>'
+        f'<div style="margin-bottom:8px;">{verdict}</div>'
+        f'<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; '
+        f'font-size:0.82rem; margin-top:8px;">'
+        f'<div>🔵 <b>30D:</b> {cov30:.0f}% covered</div>'
+        f'<div>🟠 <b>40D:</b> {cov40:.0f}% covered</div>'
+        f'<div>🟣 <b>60D:</b> {cov60:.0f}% covered</div>'
+        f'</div>'
+        f'<div style="margin-top:8px; font-size:0.78rem; opacity:0.85;">'
+        f'📊 Demand: <b>{demand["total"]}</b> dividers across <b>{demand["stores_count"]}</b> stores '
+        f'(upcoming + under-shipped)'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
 
 
 # ==================== TAB 1: CURRENT STOCK ====================
@@ -181,7 +247,6 @@ def render_po_card(po):
     q60 = int(po.get('qty_60d', 0) or 0)
     total = q30 + q40 + q60
 
-    # Magnet info on card
     strips_for_this_po = calculate_strips_needed(total)
 
     days_info = ''
@@ -310,6 +375,8 @@ def render_edit_po_form(po):
         # 🧲 Magnet warning
         if q30 + q40 + q60 > 0:
             render_magnet_warning(q30, q40, q60, f"PO #{po.get('po_number')}")
+            # 📊 Coverage widget
+            render_po_coverage_widget(q30, q40, q60, f"PO #{po.get('po_number')}")
 
         editable_statuses = [s for s in PO_STATUSES if s != 'Received']
         current_status = po.get('status', 'Draft')
@@ -360,9 +427,11 @@ def render_add_po_form():
             q40 = c2.number_input("40D Qty", min_value=0, value=0, step=1)
             q60 = c3.number_input("60D Qty", min_value=0, value=0, step=1)
 
-            # 🧲 Magnet warning (live)
+            # 🧲 Magnet warning
             if q30 + q40 + q60 > 0:
                 render_magnet_warning(q30, q40, q60, "This new PO")
+                # 📊 Coverage widget
+                render_po_coverage_widget(q30, q40, q60, "this new PO")
 
             status = st.selectbox("Initial Status", ['Draft', 'Sent to Vendor', 'Confirmed'], index=0)
 
@@ -449,7 +518,371 @@ def render_purchase_orders_tab():
         render_po_card(po)
 
 
-# ==================== TAB 3: HISTORY ====================
+# ==================== TAB 3: COVERAGE ANALYSIS (NEW) ====================
+
+def render_store_coverage_card(store_result):
+    """Render a single store's coverage card"""
+    status = store_result['status']
+
+    if status == 'covered':
+        color = '#27ae60'
+        bg = 'rgba(39,174,96,0.08)'
+        icon = '✅'
+        label = 'FULLY COVERED'
+    elif status == 'partial':
+        color = '#f39c12'
+        bg = 'rgba(243,156,18,0.08)'
+        icon = '⚠️'
+        label = 'PARTIAL'
+    else:
+        color = '#e74c3c'
+        bg = 'rgba(231,76,60,0.08)'
+        icon = '❌'
+        label = 'SHORTAGE'
+
+    # Status badge
+    if store_result.get('is_launched'):
+        store_status = '<span style="background:#27ae60; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600;">✅ LAUNCHED (under-shipped)</span>'
+    else:
+        store_status = '<span style="background:#3498db; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600;">📅 UPCOMING</span>'
+
+    # Days info
+    days_left = store_result.get('days_left')
+    if days_left is None:
+        days_text = '<span style="opacity:0.6;">No launch date</span>'
+    elif days_left < 0:
+        days_text = f'<span style="color:#e74c3c;font-weight:600;">⏰ {abs(days_left)}d overdue</span>'
+    elif days_left == 0:
+        days_text = '<span style="color:#e74c3c;font-weight:700;">🚨 LAUNCHING TODAY</span>'
+    elif days_left <= 7:
+        days_text = f'<span style="color:#e67e22;font-weight:600;">⚠️ {days_left}d left</span>'
+    else:
+        days_text = f'<span style="opacity:0.8;">📅 {days_left}d left</span>'
+
+    # Per-type breakdown
+    def type_box(label, need, alloc, short, color_t):
+        if need == 0:
+            return ''
+        if short == 0:
+            box_color = '#27ae60'
+            sign = '✓'
+        else:
+            box_color = '#e74c3c'
+            sign = f'-{short}'
+        return (
+            f'<div style="background:{color_t}15; padding:6px 10px; border-radius:6px; '
+            f'flex:1; min-width:100px; border-left:3px solid {color_t};">'
+            f'<div style="font-size:0.7rem; opacity:0.8;">{label}</div>'
+            f'<div style="font-size:0.8rem;">Need: <b>{need}</b> | Got: <b>{alloc}</b></div>'
+            f'<div style="font-weight:700; color:{box_color}; font-size:0.85rem;">{sign}</div>'
+            f'</div>'
+        )
+
+    box_30 = type_box('🔵 30D', store_result['need_30d'], store_result['alloc_30d'],
+                      store_result['short_30d'], '#3498db')
+    box_40 = type_box('🟠 40D', store_result['need_40d'], store_result['alloc_40d'],
+                      store_result['short_40d'], '#e67e22')
+    box_60 = type_box('🟣 60D', store_result['need_60d'], store_result['alloc_60d'],
+                      store_result['short_60d'], '#9b59b6')
+
+    st.markdown(
+        f'<div style="background:{bg}; border-left:4px solid {color}; '
+        f'border-radius:10px; padding:12px 16px; margin-bottom:8px;">'
+        f'<div style="display:flex; justify-content:space-between; align-items:center; '
+        f'margin-bottom:8px; flex-wrap:wrap; gap:6px;">'
+        f'<div>'
+        f'<span style="font-weight:700; font-size:1rem;">🏪 {store_result["name"]}</span> '
+        f'{store_status}'
+        f'<div style="font-size:0.78rem; opacity:0.75; margin-top:2px;">'
+        f'📍 {store_result["location"]} &nbsp;•&nbsp; {days_text}'
+        f'</div>'
+        f'</div>'
+        f'<span style="background:{color}; color:white; padding:3px 10px; '
+        f'border-radius:10px; font-size:0.72rem; font-weight:700;">'
+        f'{icon} {label}'
+        f'</span>'
+        f'</div>'
+        f'<div style="display:flex; gap:6px; flex-wrap:wrap;">'
+        f'{box_30}{box_40}{box_60}'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+
+def render_coverage_analysis_tab():
+    render_section_title("📊 Coverage Analysis")
+
+    st.markdown(
+        '<div style="background: rgba(52, 152, 219, 0.08); padding: 12px 16px; '
+        'border-radius: 10px; border-left: 4px solid #3498db; margin-bottom: 16px; '
+        'font-size:0.9rem;">'
+        '💡 <b>What this shows:</b> Will your <b>current stock + pending POs</b> '
+        'cover all upcoming stores and under-shipped existing stores?<br>'
+        '<span style="font-size:0.82rem; opacity:0.85;">'
+        'Allocation is greedy: stores with closest launch date get supplied first.'
+        '</span>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    # Calculate coverage
+    coverage = calculate_coverage()
+    demand = coverage['demand']
+
+    if demand['stores_count'] == 0:
+        st.markdown(
+            '<div style="background: rgba(39, 174, 96, 0.1); padding: 18px 22px; '
+            'border-radius: 10px; border-left: 4px solid #27ae60;">'
+            '✅ <b>No demand!</b> All stores are fully shipped, and no upcoming stores need supply.'
+            '</div>',
+            unsafe_allow_html=True
+        )
+        return
+
+    # Top: Supply vs Demand summary
+    supply = coverage['supply']
+    cov = coverage['coverage']
+    short = coverage['shortages']
+
+    # Overall status banner
+    if cov['overall_status'] == 'covered':
+        status_color = '#27ae60'
+        status_bg = 'rgba(39,174,96,0.1)'
+        status_icon = '✅'
+        status_msg = 'All demand can be fully covered!'
+    elif cov['overall_status'] == 'partial':
+        status_color = '#f39c12'
+        status_bg = 'rgba(243,156,18,0.1)'
+        status_icon = '⚠️'
+        status_msg = 'Partial coverage — some stores will fall short'
+    else:
+        status_color = '#e74c3c'
+        status_bg = 'rgba(231,76,60,0.1)'
+        status_icon = '🚨'
+        status_msg = 'Critical shortage — order more stock NOW!'
+
+    st.markdown(
+        f'<div style="background:{status_bg}; padding:16px 20px; border-radius:12px; '
+        f'border-left:5px solid {status_color}; margin-bottom:16px;">'
+        f'<div style="font-size:1.1rem; font-weight:700; margin-bottom:8px;">'
+        f'{status_icon} {status_msg}'
+        f'</div>'
+        f'<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; '
+        f'margin-top:10px;">'
+        f'<div><div style="opacity:0.7; font-size:0.78rem;">🔵 30D Coverage</div>'
+        f'<div style="font-size:1.3rem; font-weight:700;">{cov["pct_30d"]:.0f}%</div></div>'
+        f'<div><div style="opacity:0.7; font-size:0.78rem;">🟠 40D Coverage</div>'
+        f'<div style="font-size:1.3rem; font-weight:700;">{cov["pct_40d"]:.0f}%</div></div>'
+        f'<div><div style="opacity:0.7; font-size:0.78rem;">🟣 60D Coverage</div>'
+        f'<div style="font-size:1.3rem; font-weight:700;">{cov["pct_60d"]:.0f}%</div></div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    # Supply vs Demand breakdown
+    render_section_title("⚖️ Supply vs Demand")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown(
+            f'<div style="background:rgba(22,160,133,0.08); padding:14px 18px; '
+            f'border-radius:10px; border-left:4px solid #16a085;">'
+            f'<div style="font-weight:700; margin-bottom:8px;">💪 Available Supply</div>'
+            f'<div style="font-size:0.82rem;">'
+            f'📦 <b>Stock now:</b> 30D={supply["stock_30d"]} | 40D={supply["stock_40d"]} | 60D={supply["stock_60d"]}<br>'
+            f'🚚 <b>Pending POs:</b> 30D={supply["pending_30d"]} | 40D={supply["pending_40d"]} | 60D={supply["pending_60d"]}<br>'
+            f'<hr style="margin:6px 0; opacity:0.3;">'
+            f'<b>Total: 30D={supply["total_30d"]} | 40D={supply["total_40d"]} | 60D={supply["total_60d"]}</b>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    with c2:
+        st.markdown(
+            f'<div style="background:rgba(231,76,60,0.08); padding:14px 18px; '
+            f'border-radius:10px; border-left:4px solid #e74c3c;">'
+            f'<div style="font-weight:700; margin-bottom:8px;">📊 Total Demand</div>'
+            f'<div style="font-size:0.82rem;">'
+            f'🏪 <b>Stores needing supply:</b> {demand["stores_count"]}<br>'
+            f'📦 <b>Total dividers needed:</b> {demand["total"]}<br>'
+            f'<hr style="margin:6px 0; opacity:0.3;">'
+            f'<b>30D={demand["total_30d"]} | 40D={demand["total_40d"]} | 60D={demand["total_60d"]}</b>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    # Shortage recommendations
+    if short['total_shortage'] > 0:
+        st.markdown(
+            f'<div style="background:rgba(231,76,60,0.1); padding:14px 18px; '
+            f'border-radius:10px; border-left:4px solid #e74c3c; margin-top:12px;">'
+            f'<div style="font-weight:700; margin-bottom:8px;">🛒 Recommended Order</div>'
+            f'<div style="font-size:0.88rem;">'
+            f'To cover all demand, order <b>at least</b>:<br>'
+            f'• 🔵 <b>{short["short_30d"]}</b> × 30D dividers<br>'
+            f'• 🟠 <b>{short["short_40d"]}</b> × 40D dividers<br>'
+            f'• 🟣 <b>{short["short_60d"]}</b> × 60D dividers<br>'
+            f'<b>📦 Total: {short["total_shortage"]} additional dividers</b>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    # Magnet check
+    magnets = coverage['magnets']
+    render_section_title("🧲 Magnet Coverage")
+
+    if magnets['magnet_shortage'] == 0:
+        magnet_bg = 'rgba(39,174,96,0.1)'
+        magnet_border = '#27ae60'
+        magnet_icon = '✅'
+        magnet_msg = 'Sufficient magnet strips available!'
+    else:
+        magnet_bg = 'rgba(231,76,60,0.1)'
+        magnet_border = '#e74c3c'
+        magnet_icon = '🚨'
+        magnet_msg = f'<b>Need {magnets["magnet_shortage"]} more strips</b> to magnetize all demand'
+
+    st.markdown(
+        f'<div style="background:{magnet_bg}; padding:14px 18px; border-radius:10px; '
+        f'border-left:4px solid {magnet_border}; font-size:0.88rem;">'
+        f'<div style="font-weight:700; margin-bottom:6px;">{magnet_icon} {magnet_msg}</div>'
+        f'<div>'
+        f'🎗️ Strips available: <b>{magnets["strips_available"]}</b> | '
+        f'🎯 Strips needed for demand: <b>{magnets["strips_needed_for_demand"]}</b>'
+        f'</div>'
+        f'<div style="font-size:0.78rem; opacity:0.8; margin-top:4px;">'
+        f'✂️ Calculated with optimal cutting (5/7 formula)'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    # Store-by-store breakdown
+    st.markdown("---")
+    render_section_title("🏪 Store-by-Store Coverage")
+
+    # Sort options
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.caption(
+            "💡 Stores are allocated supply in priority order. "
+            "Stores with closer launch dates get supplied first."
+        )
+    with col2:
+        sort_by = st.selectbox(
+            "Priority order",
+            ['launch_date', 'need_high', 'need_low'],
+            format_func=lambda x: {
+                'launch_date': '📅 By Launch Date (closest first)',
+                'need_high': '📦 By Need (largest first)',
+                'need_low': '📦 By Need (smallest first)',
+            }[x],
+            key='coverage_sort',
+            label_visibility="collapsed"
+        )
+
+    # Allocate
+    allocated = allocate_supply_to_stores(coverage, sort_by=sort_by)
+
+    # Filter
+    col_search, col_filter = st.columns([2, 1])
+    with col_search:
+        search = st.text_input(
+            "🔍 Search store",
+            placeholder="Filter by name or location...",
+            key='coverage_search',
+            label_visibility="collapsed"
+        )
+    with col_filter:
+        status_f = st.selectbox(
+            "Status filter",
+            ['All', '✅ Covered only', '⚠️ Partial only', '❌ Shortage only'],
+            key='coverage_status_filter',
+            label_visibility="collapsed"
+        )
+
+    # Apply filters
+    filtered = list(allocated)
+    if 'Covered' in status_f:
+        filtered = [s for s in filtered if s['status'] == 'covered']
+    elif 'Partial' in status_f:
+        filtered = [s for s in filtered if s['status'] == 'partial']
+    elif 'Shortage' in status_f:
+        filtered = [s for s in filtered if s['status'] == 'shortage']
+
+    if search and search.strip():
+        s = search.strip().lower()
+        filtered = [
+            st_r for st_r in filtered
+            if s in str(st_r.get('name', '')).lower()
+            or s in str(st_r.get('location', '')).lower()
+        ]
+
+    # Counts
+    covered_n = sum(1 for s in allocated if s['status'] == 'covered')
+    partial_n = sum(1 for s in allocated if s['status'] == 'partial')
+    shortage_n = sum(1 for s in allocated if s['status'] == 'shortage')
+
+    st.caption(
+        f"📊 Total: ✅ **{covered_n}** covered | ⚠️ **{partial_n}** partial | "
+        f"❌ **{shortage_n}** shortage &nbsp;|&nbsp; "
+        f"Showing **{len(filtered)}** of **{len(allocated)}**"
+    )
+
+    if not filtered:
+        st.info("🔍 No stores match your filter.")
+        return
+
+    # Render cards
+    for store_result in filtered:
+        render_store_coverage_card(store_result)
+
+    # Export button
+    st.markdown("---")
+    col_info, col_export = st.columns([2, 1])
+    with col_info:
+        st.caption("📥 Export the coverage analysis to CSV")
+    with col_export:
+        export_rows = []
+        for s in filtered:
+            export_rows.append({
+                'Store Name': s['name'],
+                'Location': s['location'],
+                'Status': s['status'].title(),
+                'Launched': 'Yes' if s['is_launched'] else 'No',
+                'Days Left': s['days_left'] if s['days_left'] is not None else '',
+                'Need 30D': s['need_30d'],
+                'Allocated 30D': s['alloc_30d'],
+                'Short 30D': s['short_30d'],
+                'Need 40D': s['need_40d'],
+                'Allocated 40D': s['alloc_40d'],
+                'Short 40D': s['short_40d'],
+                'Need 60D': s['need_60d'],
+                'Allocated 60D': s['alloc_60d'],
+                'Short 60D': s['short_60d'],
+                'Total Short': s['total_short'],
+            })
+        export_df = pd.DataFrame(export_rows)
+        csv_buffer = io.StringIO()
+        export_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+        st.download_button(
+            label=f"📥 Export CSV ({len(filtered)} rows)",
+            data=csv_buffer.getvalue(),
+            file_name=f"coverage_analysis_{timestamp}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key='export_coverage_csv'
+        )
+
+
+# ==================== TAB 4: HISTORY ====================
 
 def render_history_tab():
     render_section_title("📜 Stock Movement History")
@@ -505,9 +938,14 @@ def render_history_tab():
 
 def render():
     st.markdown("# 📦 Vendor Stock Management")
-    st.caption("Manage stock levels, purchase orders, and movement history")
+    st.caption("Manage stock levels, purchase orders, coverage analysis, and history")
 
-    tab1, tab2, tab3 = st.tabs(["📊 Current Stock", "📋 Purchase Orders", "📜 History"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Current Stock",
+        "📋 Purchase Orders",
+        "🎯 Coverage Analysis",
+        "📜 History"
+    ])
 
     with tab1:
         render_current_stock_tab()
@@ -516,4 +954,7 @@ def render():
         render_purchase_orders_tab()
 
     with tab3:
+        render_coverage_analysis_tab()
+
+    with tab4:
         render_history_tab()
