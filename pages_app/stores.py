@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import date, datetime, timedelta
 from database import (
     get_stores, add_store, update_store, delete_store,
-    get_shipments, get_discrepancies
+    get_shipments
 )
 from components import render_section_title
 
@@ -202,17 +202,69 @@ def render_store_card(store, shipments_df):
                 st.rerun()
 
 
+def get_required_vs_shipped(stores_df, shipments_df):
+    """
+    Calculate discrepancies between Required and Shipped quantities.
+
+    diff = shipped - required
+    - positive => over-shipped (shipped more than needed)
+    - negative => under-shipped (still pending shipment)
+    - zero    => exact match
+    """
+    if stores_df.empty:
+        return pd.DataFrame()
+
+    rows = []
+    for _, store in stores_df.iterrows():
+        store_id = store['id']
+
+        if not shipments_df.empty:
+            store_ships = shipments_df[shipments_df['store_id'] == store_id]
+            s30 = int(store_ships['qty_30d'].sum()) if not store_ships.empty else 0
+            s40 = int(store_ships['qty_40d'].sum()) if not store_ships.empty else 0
+            s60 = int(store_ships['qty_60d'].sum()) if not store_ships.empty else 0
+        else:
+            s30 = s40 = s60 = 0
+
+        r30 = int(store.get('required_30d', 0) or 0)
+        r40 = int(store.get('required_40d', 0) or 0)
+        r60 = int(store.get('required_60d', 0) or 0)
+
+        diff_30 = s30 - r30
+        diff_40 = s40 - r40
+        diff_60 = s60 - r60
+
+        if diff_30 != 0 or diff_40 != 0 or diff_60 != 0:
+            rows.append({
+                'id': store_id,
+                'name': store['name'],
+                'location': store.get('location', '') or '',
+                'is_launched': bool(store.get('is_launched', False)),
+                'required_30d': r30,
+                'required_40d': r40,
+                'required_60d': r60,
+                'shipped_30d': s30,
+                'shipped_40d': s40,
+                'shipped_60d': s60,
+                'diff_30d': diff_30,
+                'diff_40d': diff_40,
+                'diff_60d': diff_60,
+            })
+
+    return pd.DataFrame(rows)
+
+
 def render_discrepancy_card(row, kind):
-    """Render a single discrepancy card (overage/shortage/mixed)"""
-    if kind == 'excess':
+    """Render a single Required vs Shipped discrepancy card"""
+    if kind == 'over':
         color = '#e67e22'
         icon = '📈'
-        kind_label = 'OVERAGE'
+        kind_label = 'OVER-SHIPPED'
         kind_bg = '#e67e22'
-    elif kind == 'shortage':
+    elif kind == 'under':
         color = '#e74c3c'
         icon = '📉'
-        kind_label = 'SHORTAGE'
+        kind_label = 'UNDER-SHIPPED'
         kind_bg = '#e74c3c'
     else:  # mixed
         color = '#9b59b6'
@@ -229,18 +281,18 @@ def render_discrepancy_card(row, kind):
 
     total_diff = row['diff_30d'] + row['diff_40d'] + row['diff_60d']
     if total_diff > 0:
-        total_summary = '<span style="color:#e67e22; font-weight:700;">+' + str(total_diff) + ' overage</span>'
+        total_summary = '<span style="color:#e67e22; font-weight:700;">+' + str(total_diff) + ' over-shipped</span>'
     elif total_diff < 0:
-        total_summary = '<span style="color:#e74c3c; font-weight:700;">' + str(total_diff) + ' shortage</span>'
+        total_summary = '<span style="color:#e74c3c; font-weight:700;">' + str(total_diff) + ' under-shipped</span>'
     else:
         total_summary = '<span style="color:#9b59b6; font-weight:700;">Net: 0 (mixed)</span>'
 
-    def diff_html(label, shipped, received, diff, dcolor):
+    def diff_html(label, required, shipped, diff):
         if diff == 0:
             return (
                 '<div style="background:rgba(127,140,141,0.1); padding:8px 12px; border-radius:8px; flex:1; min-width:130px;">'
                 '<div style="font-size:0.7rem; opacity:0.6;">' + label + '</div>'
-                '<div style="font-size:0.75rem; opacity:0.7;">Ship: ' + str(shipped) + ' | Rec: ' + str(received) + '</div>'
+                '<div style="font-size:0.75rem; opacity:0.7;">Req: ' + str(required) + ' | Ship: ' + str(shipped) + '</div>'
                 '<div style="font-weight:700; opacity:0.6;">— Match ✓</div>'
                 '</div>'
             )
@@ -252,19 +304,19 @@ def render_discrepancy_card(row, kind):
         else:
             sign = ''
             diff_color = '#e74c3c'
-            diff_label = 'SHORT'
+            diff_label = 'UNDER'
 
         return (
             '<div style="background:' + diff_color + '20; padding:8px 12px; border-radius:8px; flex:1; min-width:130px; border:1.5px solid ' + diff_color + '60;">'
             '<div style="font-size:0.7rem; opacity:0.85; color:' + diff_color + ';"><b>' + label + ' — ' + diff_label + '</b></div>'
-            '<div style="font-size:0.72rem; opacity:0.8;">Ship: ' + str(shipped) + ' | Rec: ' + str(received) + '</div>'
+            '<div style="font-size:0.72rem; opacity:0.8;">Req: ' + str(required) + ' | Ship: ' + str(shipped) + '</div>'
             '<div style="font-weight:800; color:' + diff_color + '; font-size:1.1rem;">' + sign + str(diff) + '</div>'
             '</div>'
         )
 
-    html_30 = diff_html('🔵 30D', row['shipped_30d'], row['received_30d'], row['diff_30d'], '#3498db')
-    html_40 = diff_html('🟠 40D', row['shipped_40d'], row['received_40d'], row['diff_40d'], '#e67e22')
-    html_60 = diff_html('🟣 60D', row['shipped_60d'], row['received_60d'], row['diff_60d'], '#9b59b6')
+    html_30 = diff_html('🔵 30D', row['required_30d'], row['shipped_30d'], row['diff_30d'])
+    html_40 = diff_html('🟠 40D', row['required_40d'], row['shipped_40d'], row['diff_40d'])
+    html_60 = diff_html('🟣 60D', row['required_60d'], row['shipped_60d'], row['diff_60d'])
 
     card = (
         '<div style="background: rgba(255,255,255,0.02);'
@@ -290,71 +342,68 @@ def render_discrepancy_card(row, kind):
 
 
 def render_discrepancy_section(stores_df, shipments_df):
-    """Render the discrepancy section - one unified list, sorted by severity"""
-    disc_df = get_discrepancies(stores_df, shipments_df)
+    """Render Required vs Shipped section - one unified list, sorted by severity"""
+    disc_df = get_required_vs_shipped(stores_df, shipments_df)
 
     if disc_df.empty:
-        render_section_title("⚖️ Shipped vs Received")
+        render_section_title("⚖️ Required vs Shipped")
         st.markdown(
             '<div style="background: rgba(39, 174, 96, 0.1); padding: 16px 20px; border-radius: 10px; '
             'border-left: 4px solid #27ae60; margin-bottom: 16px;">'
-            '✅ <b>No discrepancies detected!</b> All received quantities match shipments '
-            '(or no received data entered yet).'
+            '✅ <b>All shipments match requirements!</b> Every store has been shipped exactly what they need.'
             '</div>',
             unsafe_allow_html=True
         )
         return
 
-    # 🔒 Drop duplicates by store id (just in case)
+    # Drop duplicates safety
     if 'id' in disc_df.columns:
         disc_df = disc_df.drop_duplicates(subset=['id'], keep='first')
-    elif 'name' in disc_df.columns:
-        disc_df = disc_df.drop_duplicates(subset=['name'], keep='first')
 
-    excess_count = 0
-    shortage_count = 0
-    both_count = 0
+    over_count = 0
+    under_count = 0
+    mixed_count = 0
     sorted_rows = []
 
     for _, row in disc_df.iterrows():
-        has_excess = row['diff_30d'] > 0 or row['diff_40d'] > 0 or row['diff_60d'] > 0
-        has_shortage = row['diff_30d'] < 0 or row['diff_40d'] < 0 or row['diff_60d'] < 0
+        has_over = row['diff_30d'] > 0 or row['diff_40d'] > 0 or row['diff_60d'] > 0
+        has_under = row['diff_30d'] < 0 or row['diff_40d'] < 0 or row['diff_60d'] < 0
 
-        if has_excess and has_shortage:
+        if has_over and has_under:
             kind = 'mixed'
-            both_count += 1
-        elif has_excess:
-            kind = 'excess'
-            excess_count += 1
+            mixed_count += 1
+        elif has_over:
+            kind = 'over'
+            over_count += 1
         else:
-            kind = 'shortage'
-            shortage_count += 1
+            kind = 'under'
+            under_count += 1
 
         total_diff = abs(row['diff_30d']) + abs(row['diff_40d']) + abs(row['diff_60d'])
         sorted_rows.append((row, kind, total_diff))
 
     sorted_rows.sort(key=lambda x: -x[2])
 
-    render_section_title("⚖️ Shipped vs Received (" + str(len(disc_df)) + " stores with discrepancies)")
+    render_section_title("⚖️ Required vs Shipped (" + str(len(disc_df)) + " stores with mismatches)")
 
     summary_parts = []
-    if excess_count > 0:
-        summary_parts.append('<span style="color:#e67e22;"><b>📈 ' + str(excess_count) + ' Overage</b></span>')
-    if shortage_count > 0:
-        summary_parts.append('<span style="color:#e74c3c;"><b>📉 ' + str(shortage_count) + ' Shortage</b></span>')
-    if both_count > 0:
-        summary_parts.append('<span style="color:#9b59b6;"><b>🔄 ' + str(both_count) + ' Mixed</b></span>')
+    if under_count > 0:
+        summary_parts.append('<span style="color:#e74c3c;"><b>📉 ' + str(under_count) + ' Under-shipped</b></span>')
+    if over_count > 0:
+        summary_parts.append('<span style="color:#e67e22;"><b>📈 ' + str(over_count) + ' Over-shipped</b></span>')
+    if mixed_count > 0:
+        summary_parts.append('<span style="color:#9b59b6;"><b>🔄 ' + str(mixed_count) + ' Mixed</b></span>')
 
     summary_text = ' &nbsp;|&nbsp; '.join(summary_parts)
 
     st.markdown(
         '<div style="background: rgba(243, 156, 18, 0.1); padding: 12px 18px; border-radius: 10px; '
         'border-left: 4px solid #f39c12; margin-bottom: 16px; font-size:0.9rem;">'
-        '💡 Stores with differences between shipped and received quantities (sorted by severity).<br>'
+        '💡 Stores where shipped quantities don\'t match required quantities (sorted by severity).<br>'
         '<div style="margin-top:6px;">' + summary_text + '</div>'
         '<span style="font-size:0.78rem; opacity:0.85; margin-top:4px; display:block;">'
-        '📈 <b>Overage</b> = Received > Shipped &nbsp;|&nbsp; '
-        '📉 <b>Shortage</b> = Received < Shipped &nbsp;|&nbsp; '
+        '📉 <b>Under-shipped</b> = Shipped &lt; Required (still pending) &nbsp;|&nbsp; '
+        '📈 <b>Over-shipped</b> = Shipped &gt; Required &nbsp;|&nbsp; '
         '🔄 <b>Mixed</b> = Both in different sizes'
         '</span>'
         '</div>',
