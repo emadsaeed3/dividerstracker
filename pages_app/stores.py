@@ -203,7 +203,7 @@ def render_store_card(store, shipments_df):
 
 
 def render_discrepancy_card(row, kind):
-    # Color & icon based on kind
+    """Render a single discrepancy card (overage/shortage/mixed)"""
     if kind == 'excess':
         color = '#e67e22'
         icon = '📈'
@@ -220,16 +220,13 @@ def render_discrepancy_card(row, kind):
         kind_label = 'MIXED'
         kind_bg = '#9b59b6'
 
-    # Status badge (Launched/Upcoming)
     if row.get('is_launched', False):
         status_badge = ' <span style="background:#27ae60; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">✅ LAUNCHED</span>'
     else:
         status_badge = ' <span style="background:#3498db; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">📅 UPCOMING</span>'
 
-    # Type badge
     type_badge = '<span style="background:' + kind_bg + '; color:white; padding:3px 10px; border-radius:10px; font-size:0.72rem; font-weight:700; letter-spacing:0.5px;">' + icon + ' ' + kind_label + '</span>'
 
-    # Calculate totals
     total_diff = row['diff_30d'] + row['diff_40d'] + row['diff_60d']
     if total_diff > 0:
         total_summary = '<span style="color:#e67e22; font-weight:700;">+' + str(total_diff) + ' overage</span>'
@@ -293,6 +290,7 @@ def render_discrepancy_card(row, kind):
 
 
 def render_discrepancy_section(stores_df, shipments_df):
+    """Render the discrepancy section - one unified list, sorted by severity"""
     disc_df = get_discrepancies(stores_df, shipments_df)
 
     if disc_df.empty:
@@ -306,6 +304,12 @@ def render_discrepancy_section(stores_df, shipments_df):
             unsafe_allow_html=True
         )
         return
+
+    # 🔒 Drop duplicates by store id (just in case)
+    if 'id' in disc_df.columns:
+        disc_df = disc_df.drop_duplicates(subset=['id'], keep='first')
+    elif 'name' in disc_df.columns:
+        disc_df = disc_df.drop_duplicates(subset=['name'], keep='first')
 
     excess_count = 0
     shortage_count = 0
