@@ -226,10 +226,10 @@ def render_discrepancy_card(row, kind):
     else:
         status_badge = ' <span style="background:#3498db; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">📅 UPCOMING</span>'
 
-    # Type badge (Overage/Shortage/Mixed)
+    # Type badge
     type_badge = '<span style="background:' + kind_bg + '; color:white; padding:3px 10px; border-radius:10px; font-size:0.72rem; font-weight:700; letter-spacing:0.5px;">' + icon + ' ' + kind_label + '</span>'
 
-    # Calculate totals for summary
+    # Calculate totals
     total_diff = row['diff_30d'] + row['diff_40d'] + row['diff_60d']
     if total_diff > 0:
         total_summary = '<span style="color:#e67e22; font-weight:700;">+' + str(total_diff) + ' overage</span>'
@@ -291,56 +291,6 @@ def render_discrepancy_card(row, kind):
 
     st.markdown(card, unsafe_allow_html=True)
 
-    # Launched badge
-    launched_badge = ''
-    if row.get('is_launched', False):
-        launched_badge = ' <span style="background:#27ae60; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">✅ LAUNCHED</span>'
-    else:
-        launched_badge = ' <span style="background:#3498db; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">📅 UPCOMING</span>'
-
-    def diff_html(label, shipped, received, diff, dcolor):
-        if diff == 0:
-            return (
-                '<div style="background:rgba(127,140,141,0.1); padding:8px 12px; border-radius:8px; flex:1; min-width:130px;">'
-                '<div style="font-size:0.7rem; opacity:0.6;">' + label + '</div>'
-                '<div style="font-size:0.75rem; opacity:0.7;">Ship: ' + str(shipped) + ' | Rec: ' + str(received) + '</div>'
-                '<div style="font-weight:700; opacity:0.6;">—</div>'
-                '</div>'
-            )
-        sign = '+' if diff > 0 else ''
-        return (
-            '<div style="background:' + dcolor + '20; padding:8px 12px; border-radius:8px; flex:1; min-width:130px; border:1.5px solid ' + dcolor + '60;">'
-            '<div style="font-size:0.7rem; opacity:0.8; color:' + dcolor + ';"><b>' + label + '</b></div>'
-            '<div style="font-size:0.72rem; opacity:0.8;">Ship: ' + str(shipped) + ' | Rec: ' + str(received) + '</div>'
-            '<div style="font-weight:800; color:' + dcolor + '; font-size:1rem;">' + sign + str(diff) + '</div>'
-            '</div>'
-        )
-
-    html_30 = diff_html('🔵 30D', row['shipped_30d'], row['received_30d'], row['diff_30d'], '#3498db')
-    html_40 = diff_html('🟠 40D', row['shipped_40d'], row['received_40d'], row['diff_40d'], '#e67e22')
-    html_60 = diff_html('🟣 60D', row['shipped_60d'], row['received_60d'], row['diff_60d'], '#9b59b6')
-
-    card = (
-        '<div style="background: rgba(255,255,255,0.02);'
-        'border-left: 5px solid ' + color + ';'
-        'border-radius: 12px;'
-        'padding: 14px 18px;'
-        'margin-bottom: 10px;">'
-        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap;">'
-        '<div>'
-        '<span style="font-weight:700; font-size:1.05rem;">' + icon + ' 🏪 ' + str(row['name']) + '</span>'
-        + launched_badge +
-        '<span style="opacity:0.7; font-size:0.85rem;"> — 📍 ' + str(row['location']) + '</span>'
-        '</div>'
-        '</div>'
-        '<div style="display:flex; gap:8px; flex-wrap:wrap;">'
-        + html_30 + html_40 + html_60 +
-        '</div>'
-        '</div>'
-    )
-
-    st.markdown(card, unsafe_allow_html=True)
-
 
 def render_discrepancy_section(stores_df, shipments_df):
     disc_df = get_discrepancies(stores_df, shipments_df)
@@ -357,7 +307,6 @@ def render_discrepancy_section(stores_df, shipments_df):
         )
         return
 
-    # Classify each store as excess, shortage, or both
     excess_count = 0
     shortage_count = 0
     both_count = 0
@@ -377,16 +326,13 @@ def render_discrepancy_section(stores_df, shipments_df):
             kind = 'shortage'
             shortage_count += 1
 
-        # Calculate severity (total absolute diff) for sorting
         total_diff = abs(row['diff_30d']) + abs(row['diff_40d']) + abs(row['diff_60d'])
         sorted_rows.append((row, kind, total_diff))
 
-    # Sort by severity (highest first)
     sorted_rows.sort(key=lambda x: -x[2])
 
     render_section_title("⚖️ Shipped vs Received (" + str(len(disc_df)) + " stores with discrepancies)")
 
-    # Summary banner
     summary_parts = []
     if excess_count > 0:
         summary_parts.append('<span style="color:#e67e22;"><b>📈 ' + str(excess_count) + ' Overage</b></span>')
@@ -411,10 +357,10 @@ def render_discrepancy_section(stores_df, shipments_df):
         unsafe_allow_html=True
     )
 
-    # Render all in one section, sorted by severity
     for row, kind, _ in sorted_rows:
         render_discrepancy_card(row, kind)
-        
+
+
 def render():
     st.markdown("# 🏪 Stores Management")
 
@@ -474,7 +420,6 @@ def render():
 
     render_section_title("📋 All Stores")
 
-    # ============ SEARCH + FILTER ============
     col_search, col_filter = st.columns([2, 1])
     with col_search:
         search_query = st.text_input(
@@ -493,13 +438,11 @@ def render():
 
     filtered_df = stores_df.copy()
 
-    # Apply status filter
     if status_filter == 'Launched only':
         filtered_df = filtered_df[filtered_df['is_launched'] == True]
     elif status_filter == 'Upcoming only':
         filtered_df = filtered_df[filtered_df['is_launched'] != True]
 
-    # Apply search
     if search_query and search_query.strip():
         s = search_query.strip().lower()
         mask = (
@@ -515,7 +458,6 @@ def render():
             st.info("📭 No stores match the filter.")
         return
 
-    # Show count
     st.caption("Showing **" + str(len(filtered_df)) + "** of **" + str(len(stores_df)) + "** stores")
 
     stores_list = list(filtered_df.iterrows())
