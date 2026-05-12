@@ -415,17 +415,6 @@ def render_discrepancy_section(stores_df, shipments_df):
     for row, kind, _ in sorted_rows:
         render_discrepancy_card(row, kind)
         
-    if excess_stores:
-        st.markdown("### 📈 Excess — Received MORE than Shipped (" + str(len(excess_stores)) + ")")
-        for row in excess_stores:
-            render_discrepancy_card(row, 'excess')
-
-    if shortage_stores:
-        st.markdown("### 📉 Shortage — Received LESS than Shipped (" + str(len(shortage_stores)) + ")")
-        for row in shortage_stores:
-            render_discrepancy_card(row, 'shortage')
-
-
 def render():
     st.markdown("# 🏪 Stores Management")
 
