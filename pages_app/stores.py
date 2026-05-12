@@ -203,8 +203,93 @@ def render_store_card(store, shipments_df):
 
 
 def render_discrepancy_card(row, kind):
-    color = '#e67e22' if kind == 'excess' else '#e74c3c'
-    icon = '📈' if kind == 'excess' else '📉'
+    # Color & icon based on kind
+    if kind == 'excess':
+        color = '#e67e22'
+        icon = '📈'
+        kind_label = 'OVERAGE'
+        kind_bg = '#e67e22'
+    elif kind == 'shortage':
+        color = '#e74c3c'
+        icon = '📉'
+        kind_label = 'SHORTAGE'
+        kind_bg = '#e74c3c'
+    else:  # mixed
+        color = '#9b59b6'
+        icon = '🔄'
+        kind_label = 'MIXED'
+        kind_bg = '#9b59b6'
+
+    # Status badge (Launched/Upcoming)
+    if row.get('is_launched', False):
+        status_badge = ' <span style="background:#27ae60; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">✅ LAUNCHED</span>'
+    else:
+        status_badge = ' <span style="background:#3498db; color:white; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:6px;">📅 UPCOMING</span>'
+
+    # Type badge (Overage/Shortage/Mixed)
+    type_badge = '<span style="background:' + kind_bg + '; color:white; padding:3px 10px; border-radius:10px; font-size:0.72rem; font-weight:700; letter-spacing:0.5px;">' + icon + ' ' + kind_label + '</span>'
+
+    # Calculate totals for summary
+    total_diff = row['diff_30d'] + row['diff_40d'] + row['diff_60d']
+    if total_diff > 0:
+        total_summary = '<span style="color:#e67e22; font-weight:700;">+' + str(total_diff) + ' overage</span>'
+    elif total_diff < 0:
+        total_summary = '<span style="color:#e74c3c; font-weight:700;">' + str(total_diff) + ' shortage</span>'
+    else:
+        total_summary = '<span style="color:#9b59b6; font-weight:700;">Net: 0 (mixed)</span>'
+
+    def diff_html(label, shipped, received, diff, dcolor):
+        if diff == 0:
+            return (
+                '<div style="background:rgba(127,140,141,0.1); padding:8px 12px; border-radius:8px; flex:1; min-width:130px;">'
+                '<div style="font-size:0.7rem; opacity:0.6;">' + label + '</div>'
+                '<div style="font-size:0.75rem; opacity:0.7;">Ship: ' + str(shipped) + ' | Rec: ' + str(received) + '</div>'
+                '<div style="font-weight:700; opacity:0.6;">— Match ✓</div>'
+                '</div>'
+            )
+
+        if diff > 0:
+            sign = '+'
+            diff_color = '#e67e22'
+            diff_label = 'OVER'
+        else:
+            sign = ''
+            diff_color = '#e74c3c'
+            diff_label = 'SHORT'
+
+        return (
+            '<div style="background:' + diff_color + '20; padding:8px 12px; border-radius:8px; flex:1; min-width:130px; border:1.5px solid ' + diff_color + '60;">'
+            '<div style="font-size:0.7rem; opacity:0.85; color:' + diff_color + ';"><b>' + label + ' — ' + diff_label + '</b></div>'
+            '<div style="font-size:0.72rem; opacity:0.8;">Ship: ' + str(shipped) + ' | Rec: ' + str(received) + '</div>'
+            '<div style="font-weight:800; color:' + diff_color + '; font-size:1.1rem;">' + sign + str(diff) + '</div>'
+            '</div>'
+        )
+
+    html_30 = diff_html('🔵 30D', row['shipped_30d'], row['received_30d'], row['diff_30d'], '#3498db')
+    html_40 = diff_html('🟠 40D', row['shipped_40d'], row['received_40d'], row['diff_40d'], '#e67e22')
+    html_60 = diff_html('🟣 60D', row['shipped_60d'], row['received_60d'], row['diff_60d'], '#9b59b6')
+
+    card = (
+        '<div style="background: rgba(255,255,255,0.02);'
+        'border-left: 5px solid ' + color + ';'
+        'border-radius: 12px;'
+        'padding: 14px 18px;'
+        'margin-bottom: 10px;">'
+        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">'
+        '<div>'
+        '<span style="font-weight:700; font-size:1.05rem;">🏪 ' + str(row['name']) + '</span>'
+        + status_badge +
+        '<div style="opacity:0.7; font-size:0.82rem; margin-top:3px;">📍 ' + str(row['location']) + ' &nbsp;•&nbsp; ' + total_summary + '</div>'
+        '</div>'
+        '<div>' + type_badge + '</div>'
+        '</div>'
+        '<div style="display:flex; gap:8px; flex-wrap:wrap;">'
+        + html_30 + html_40 + html_60 +
+        '</div>'
+        '</div>'
+    )
+
+    st.markdown(card, unsafe_allow_html=True)
 
     # Launched badge
     launched_badge = ''
@@ -272,31 +357,64 @@ def render_discrepancy_section(stores_df, shipments_df):
         )
         return
 
-    excess_stores = []
-    shortage_stores = []
+    # Classify each store as excess, shortage, or both
+    excess_count = 0
+    shortage_count = 0
+    both_count = 0
+    sorted_rows = []
 
     for _, row in disc_df.iterrows():
         has_excess = row['diff_30d'] > 0 or row['diff_40d'] > 0 or row['diff_60d'] > 0
         has_shortage = row['diff_30d'] < 0 or row['diff_40d'] < 0 or row['diff_60d'] < 0
 
-        if has_excess:
-            excess_stores.append(row)
-        if has_shortage:
-            shortage_stores.append(row)
+        if has_excess and has_shortage:
+            kind = 'mixed'
+            both_count += 1
+        elif has_excess:
+            kind = 'excess'
+            excess_count += 1
+        else:
+            kind = 'shortage'
+            shortage_count += 1
 
-    render_section_title("⚖️ Shipped vs Received (" + str(len(disc_df)) + " discrepancies)")
+        # Calculate severity (total absolute diff) for sorting
+        total_diff = abs(row['diff_30d']) + abs(row['diff_40d']) + abs(row['diff_60d'])
+        sorted_rows.append((row, kind, total_diff))
+
+    # Sort by severity (highest first)
+    sorted_rows.sort(key=lambda x: -x[2])
+
+    render_section_title("⚖️ Shipped vs Received (" + str(len(disc_df)) + " stores with discrepancies)")
+
+    # Summary banner
+    summary_parts = []
+    if excess_count > 0:
+        summary_parts.append('<span style="color:#e67e22;"><b>📈 ' + str(excess_count) + ' Overage</b></span>')
+    if shortage_count > 0:
+        summary_parts.append('<span style="color:#e74c3c;"><b>📉 ' + str(shortage_count) + ' Shortage</b></span>')
+    if both_count > 0:
+        summary_parts.append('<span style="color:#9b59b6;"><b>🔄 ' + str(both_count) + ' Mixed</b></span>')
+
+    summary_text = ' &nbsp;|&nbsp; '.join(summary_parts)
+
     st.markdown(
         '<div style="background: rgba(243, 156, 18, 0.1); padding: 12px 18px; border-radius: 10px; '
         'border-left: 4px solid #f39c12; margin-bottom: 16px; font-size:0.9rem;">'
-        '💡 These stores have differences between what was shipped and what was actually received.<br>'
-        '<span style="font-size:0.82rem; opacity:0.85;">'
-        '✅ <b>LAUNCHED</b> = store is already operational | '
-        '📅 <b>UPCOMING</b> = store entered receipt data before launch'
+        '💡 Stores with differences between shipped and received quantities (sorted by severity).<br>'
+        '<div style="margin-top:6px;">' + summary_text + '</div>'
+        '<span style="font-size:0.78rem; opacity:0.85; margin-top:4px; display:block;">'
+        '📈 <b>Overage</b> = Received > Shipped &nbsp;|&nbsp; '
+        '📉 <b>Shortage</b> = Received < Shipped &nbsp;|&nbsp; '
+        '🔄 <b>Mixed</b> = Both in different sizes'
         '</span>'
         '</div>',
         unsafe_allow_html=True
     )
 
+    # Render all in one section, sorted by severity
+    for row, kind, _ in sorted_rows:
+        render_discrepancy_card(row, kind)
+        
     if excess_stores:
         st.markdown("### 📈 Excess — Received MORE than Shipped (" + str(len(excess_stores)) + ")")
         for row in excess_stores:
