@@ -1,6 +1,9 @@
 """
 Stores management page (no transportation field - moved to shipments)
+Discrepancy = Required vs Shipped (planning view, not logistics)
+Features: Collapsible section, filters, sorting, CSV export
 """
+import io
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
@@ -341,29 +344,60 @@ def render_discrepancy_card(row, kind):
     st.markdown(card, unsafe_allow_html=True)
 
 
+def build_export_dataframe(filtered_rows):
+    """Build a clean DataFrame for CSV export"""
+    export_rows = []
+    for row, kind, severity in filtered_rows:
+        kind_label_map = {
+            'over': 'Over-shipped',
+            'under': 'Under-shipped',
+            'mixed': 'Mixed'
+        }
+        export_rows.append({
+            'Store Name': row.get('name', ''),
+            'Location': row.get('location', ''),
+            'Status': 'Launched' if row.get('is_launched') else 'Upcoming',
+            'Discrepancy Type': kind_label_map.get(kind, kind),
+            'Required 30D': row['required_30d'],
+            'Shipped 30D': row['shipped_30d'],
+            'Diff 30D': row['diff_30d'],
+            'Required 40D': row['required_40d'],
+            'Shipped 40D': row['shipped_40d'],
+            'Diff 40D': row['diff_40d'],
+            'Required 60D': row['required_60d'],
+            'Shipped 60D': row['shipped_60d'],
+            'Diff 60D': row['diff_60d'],
+            'Total Diff': row['diff_30d'] + row['diff_40d'] + row['diff_60d'],
+            'Severity (abs)': severity,
+        })
+    return pd.DataFrame(export_rows)
+
+
 def render_discrepancy_section(stores_df, shipments_df):
-    """Render Required vs Shipped section - one unified list, sorted by severity"""
+    """Render Required vs Shipped section - collapsible with filters, sort, export"""
     disc_df = get_required_vs_shipped(stores_df, shipments_df)
 
+    # Empty state - collapsed by default
     if disc_df.empty:
-        render_section_title("⚖️ Required vs Shipped")
-        st.markdown(
-            '<div style="background: rgba(39, 174, 96, 0.1); padding: 16px 20px; border-radius: 10px; '
-            'border-left: 4px solid #27ae60; margin-bottom: 16px;">'
-            '✅ <b>All shipments match requirements!</b> Every store has been shipped exactly what they need.'
-            '</div>',
-            unsafe_allow_html=True
-        )
+        with st.expander("⚖️ **Required vs Shipped** — ✅ All matched", expanded=False):
+            st.markdown(
+                '<div style="background: rgba(39, 174, 96, 0.1); padding: 16px 20px; border-radius: 10px; '
+                'border-left: 4px solid #27ae60; margin-bottom: 8px;">'
+                '✅ <b>All shipments match requirements!</b> Every store has been shipped exactly what they need.'
+                '</div>',
+                unsafe_allow_html=True
+            )
         return
 
     # Drop duplicates safety
     if 'id' in disc_df.columns:
         disc_df = disc_df.drop_duplicates(subset=['id'], keep='first')
 
+    # Classify all rows
     over_count = 0
     under_count = 0
     mixed_count = 0
-    sorted_rows = []
+    classified = []
 
     for _, row in disc_df.iterrows():
         has_over = row['diff_30d'] > 0 or row['diff_40d'] > 0 or row['diff_60d'] > 0
@@ -380,38 +414,183 @@ def render_discrepancy_section(stores_df, shipments_df):
             under_count += 1
 
         total_diff = abs(row['diff_30d']) + abs(row['diff_40d']) + abs(row['diff_60d'])
-        sorted_rows.append((row, kind, total_diff))
+        classified.append((row, kind, total_diff))
 
-    sorted_rows.sort(key=lambda x: -x[2])
-
-    render_section_title("⚖️ Required vs Shipped (" + str(len(disc_df)) + " stores with mismatches)")
-
-    summary_parts = []
+    # Build expander label
+    summary_badges = []
     if under_count > 0:
-        summary_parts.append('<span style="color:#e74c3c;"><b>📉 ' + str(under_count) + ' Under-shipped</b></span>')
+        summary_badges.append("📉 " + str(under_count) + " Under")
     if over_count > 0:
-        summary_parts.append('<span style="color:#e67e22;"><b>📈 ' + str(over_count) + ' Over-shipped</b></span>')
+        summary_badges.append("📈 " + str(over_count) + " Over")
     if mixed_count > 0:
-        summary_parts.append('<span style="color:#9b59b6;"><b>🔄 ' + str(mixed_count) + ' Mixed</b></span>')
+        summary_badges.append("🔄 " + str(mixed_count) + " Mixed")
+    summary_label = " | ".join(summary_badges)
 
-    summary_text = ' &nbsp;|&nbsp; '.join(summary_parts)
+    expander_label = "⚖️ **Required vs Shipped** — " + str(len(disc_df)) + " stores (" + summary_label + ")"
 
-    st.markdown(
-        '<div style="background: rgba(243, 156, 18, 0.1); padding: 12px 18px; border-radius: 10px; '
-        'border-left: 4px solid #f39c12; margin-bottom: 16px; font-size:0.9rem;">'
-        '💡 Stores where shipped quantities don\'t match required quantities (sorted by severity).<br>'
-        '<div style="margin-top:6px;">' + summary_text + '</div>'
-        '<span style="font-size:0.78rem; opacity:0.85; margin-top:4px; display:block;">'
-        '📉 <b>Under-shipped</b> = Shipped &lt; Required (still pending) &nbsp;|&nbsp; '
-        '📈 <b>Over-shipped</b> = Shipped &gt; Required &nbsp;|&nbsp; '
-        '🔄 <b>Mixed</b> = Both in different sizes'
-        '</span>'
-        '</div>',
-        unsafe_allow_html=True
-    )
+    # Remember user's expand/collapse choice
+    if 'disc_expanded' not in st.session_state:
+        st.session_state['disc_expanded'] = True
 
-    for row, kind, _ in sorted_rows:
-        render_discrepancy_card(row, kind)
+    with st.expander(expander_label, expanded=st.session_state['disc_expanded']):
+        # Top toolbar
+        col_hint, col_reset = st.columns([3, 1])
+        with col_hint:
+            st.caption("💡 Click the section header to collapse this view")
+        with col_reset:
+            if st.button("🔄 Reset Filters", key='reset_disc_filters', use_container_width=True):
+                for k in ['disc_search', 'disc_type_filter', 'disc_status_filter', 'disc_sort']:
+                    st.session_state.pop(k, None)
+                st.rerun()
+
+        # Info banner
+        summary_parts = []
+        if under_count > 0:
+            summary_parts.append('<span style="color:#e74c3c;"><b>📉 ' + str(under_count) + ' Under-shipped</b></span>')
+        if over_count > 0:
+            summary_parts.append('<span style="color:#e67e22;"><b>📈 ' + str(over_count) + ' Over-shipped</b></span>')
+        if mixed_count > 0:
+            summary_parts.append('<span style="color:#9b59b6;"><b>🔄 ' + str(mixed_count) + ' Mixed</b></span>')
+
+        summary_text = ' &nbsp;|&nbsp; '.join(summary_parts)
+
+        st.markdown(
+            '<div style="background: rgba(243, 156, 18, 0.1); padding: 12px 18px; border-radius: 10px; '
+            'border-left: 4px solid #f39c12; margin-bottom: 14px; font-size:0.9rem;">'
+            '💡 Stores where shipped quantities don\'t match required quantities.<br>'
+            '<div style="margin-top:6px;">' + summary_text + '</div>'
+            '<span style="font-size:0.78rem; opacity:0.85; margin-top:4px; display:block;">'
+            '📉 <b>Under-shipped</b> = Shipped &lt; Required &nbsp;|&nbsp; '
+            '📈 <b>Over-shipped</b> = Shipped &gt; Required &nbsp;|&nbsp; '
+            '🔄 <b>Mixed</b> = Both in different sizes'
+            '</span>'
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+        # Filters row
+        col_search, col_type, col_status, col_sort = st.columns([2, 1.2, 1.2, 1.2])
+
+        with col_search:
+            disc_search = st.text_input(
+                "🔍 Search store",
+                placeholder="Type store name or location...",
+                key='disc_search',
+                label_visibility="collapsed"
+            )
+
+        with col_type:
+            type_options = ['All Types']
+            if under_count > 0:
+                type_options.append('📉 Under-shipped only')
+            if over_count > 0:
+                type_options.append('📈 Over-shipped only')
+            if mixed_count > 0:
+                type_options.append('🔄 Mixed only')
+
+            type_filter = st.selectbox(
+                "Type",
+                type_options,
+                key='disc_type_filter',
+                label_visibility="collapsed"
+            )
+
+        with col_status:
+            status_filter = st.selectbox(
+                "Status",
+                ['All Stores', '✅ Launched only', '📅 Upcoming only'],
+                key='disc_status_filter',
+                label_visibility="collapsed"
+            )
+
+        with col_sort:
+            sort_option = st.selectbox(
+                "Sort by",
+                ['Severity (high→low)', 'Severity (low→high)', 'Name (A→Z)', 'Name (Z→A)'],
+                key='disc_sort',
+                label_visibility="collapsed"
+            )
+
+        # Apply filters
+        filtered = list(classified)
+
+        if 'Under-shipped' in type_filter:
+            filtered = [item for item in filtered if item[1] == 'under']
+        elif 'Over-shipped' in type_filter:
+            filtered = [item for item in filtered if item[1] == 'over']
+        elif 'Mixed' in type_filter:
+            filtered = [item for item in filtered if item[1] == 'mixed']
+
+        if 'Launched' in status_filter:
+            filtered = [item for item in filtered if bool(item[0].get('is_launched', False))]
+        elif 'Upcoming' in status_filter:
+            filtered = [item for item in filtered if not bool(item[0].get('is_launched', False))]
+
+        if disc_search and disc_search.strip():
+            s = disc_search.strip().lower()
+            filtered = [
+                item for item in filtered
+                if s in str(item[0].get('name', '')).lower()
+                or s in str(item[0].get('location', '')).lower()
+            ]
+
+        # Sort
+        if sort_option == 'Severity (high→low)':
+            filtered.sort(key=lambda x: -x[2])
+        elif sort_option == 'Severity (low→high)':
+            filtered.sort(key=lambda x: x[2])
+        elif sort_option == 'Name (A→Z)':
+            filtered.sort(key=lambda x: str(x[0].get('name', '')).lower())
+        elif sort_option == 'Name (Z→A)':
+            filtered.sort(key=lambda x: str(x[0].get('name', '')).lower(), reverse=True)
+
+        # Counter
+        if len(filtered) != len(classified):
+            st.caption("🔎 Showing **" + str(len(filtered)) + "** of **" + str(len(classified)) + "** stores")
+        else:
+            st.caption("📊 Showing all **" + str(len(classified)) + "** stores")
+
+        # No results
+        if not filtered:
+            st.markdown(
+                '<div style="background: rgba(127, 140, 141, 0.1); padding: 14px 18px; border-radius: 10px; '
+                'border-left: 4px solid #7f8c8d; margin-top: 8px; font-size:0.9rem;">'
+                '🔍 <b>No stores match your filters.</b> Click "Reset Filters" or adjust your search.'
+                '</div>',
+                unsafe_allow_html=True
+            )
+            return
+
+        # Render filtered cards
+        for row, kind, _ in filtered:
+            render_discrepancy_card(row, kind)
+
+        # 📥 Export to CSV button (at the bottom)
+        st.markdown("---")
+        col_info, col_export = st.columns([2, 1])
+
+        with col_info:
+            st.caption(
+                "📥 Export the **filtered** list above to CSV for sharing or further analysis."
+            )
+
+        with col_export:
+            export_df = build_export_dataframe(filtered)
+            csv_buffer = io.StringIO()
+            export_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+            csv_data = csv_buffer.getvalue()
+
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+            filename = "required_vs_shipped_" + timestamp + ".csv"
+
+            st.download_button(
+                label="📥 Export CSV (" + str(len(filtered)) + " rows)",
+                data=csv_data,
+                file_name=filename,
+                mime="text/csv",
+                use_container_width=True,
+                key='export_disc_csv'
+            )
 
 
 def render():
