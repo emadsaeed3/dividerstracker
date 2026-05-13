@@ -25,6 +25,14 @@ STATUS_CONFIG = {
 }
 
 
+def _short_name(item):
+    return (item
+            .replace('Wireless Scanner - ', 'WS-')
+            .replace('Charger Wireless Scanner - ', 'Chrg-')
+            .replace('Yubikey - Security Key', 'Yubikey')
+            .replace('Zebra ZD621', 'Zebra'))
+
+
 def get_rdcs_with_pending(rdcs_df):
     if rdcs_df.empty:
         return pd.DataFrame()
@@ -85,37 +93,22 @@ def render_scheduled_card(row, idx):
     pending_chips = ""
     for item, qty in row['pending'].items():
         if qty > 0:
-            short = item.replace('Wireless Scanner - ', 'WS-').replace('Charger Wireless Scanner - ', 'Chrg-').replace('Yubikey - Security Key', 'Yubikey').replace('Zebra ZD621', 'Zebra')
-            pending_chips += f"""
-            <div style="background:rgba(52,152,219,0.15); padding:4px 8px; border-radius:6px; font-size:0.72rem;">
-                <b>{short}:</b> <span style="color:#3498db; font-weight:700;">{qty}</span>
-            </div>
-            """
+            short = _short_name(item)
+            pending_chips += f'<div style="background:rgba(52,152,219,0.15); padding:4px 8px; border-radius:6px; font-size:0.72rem;"><b>{short}:</b> <span style="color:#3498db; font-weight:700;">{qty}</span></div>'
 
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {urgency_color}15 100%);
-                border-left: 5px solid {urgency_color};
-                border-radius: 14px;
-                padding: 16px 18px;
-                margin-bottom: 14px;
-                box-shadow: 0 4px 16px rgba(0,0,0,0.08);">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-            <div>
-                <div style="font-size:1.05rem; font-weight:700;">🏢 {row['name']}</div>
-                <div style="font-size:0.8rem; opacity:0.7; margin-top:2px;">📍 {row['location']}</div>
-            </div>
-            <div style="background:{urgency_color}; color:white; padding:4px 10px; border-radius:20px; font-weight:700; font-size:0.72rem;">
-                {urgency_icon} {row['days_left']}d left
-            </div>
-        </div>
-        <div style="font-size:0.78rem; opacity:0.85; margin-bottom:8px;">
-            🚀 Launch: <b>{row['launch_date']}</b> | 📆 Ship by: <b>{row['ship_by']}</b> | 📦 <b>{row['total_pending']}</b> items
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap; padding-top:10px; border-top:1px dashed rgba(127,140,141,0.3);">
-            {pending_chips}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    html = (
+        f'<div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {urgency_color}15 100%); border-left: 5px solid {urgency_color}; border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.08);">'
+        f'<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:8px;">'
+        f'<div><div style="font-size:1.05rem; font-weight:700;">🏢 {row["name"]}</div>'
+        f'<div style="font-size:0.8rem; opacity:0.7; margin-top:2px;">📍 {row["location"]}</div></div>'
+        f'<div style="background:{urgency_color}; color:white; padding:4px 10px; border-radius:20px; font-weight:700; font-size:0.72rem;">{urgency_icon} {row["days_left"]}d left</div>'
+        f'</div>'
+        f'<div style="font-size:0.78rem; opacity:0.85; margin-bottom:8px;">🚀 Launch: <b>{row["launch_date"]}</b> | 📆 Ship by: <b>{row["ship_by"]}</b> | 📦 <b>{row["total_pending"]}</b> items</div>'
+        f'<div style="display:flex; gap:6px; flex-wrap:wrap; padding-top:10px; border-top:1px dashed rgba(127,140,141,0.3);">{pending_chips}</div>'
+        f'</div>'
+    )
+
+    st.markdown(html, unsafe_allow_html=True)
 
     with st.expander(f"🚀 Create Shipment for **{row['name']}**", expanded=False):
         with st.form(f"quick_ship_it_{row['id']}_{idx}", clear_on_submit=True):
@@ -174,12 +167,8 @@ def render_shipment_card(ship, idx):
     items_chips = ""
     if not items_df.empty:
         for _, it in items_df.iterrows():
-            short = it['equipment_type'].replace('Wireless Scanner - ', 'WS-').replace('Charger Wireless Scanner - ', 'Chrg-').replace('Yubikey - Security Key', 'Yubikey').replace('Zebra ZD621', 'Zebra')
-            items_chips += f"""
-            <div style="background:rgba(52,152,219,0.15); padding:5px 10px; border-radius:8px; font-size:0.72rem;">
-                <b>{short}:</b> <span style="color:#3498db; font-weight:700;">{int(it['quantity'])}</span>
-            </div>
-            """
+            short = _short_name(it['equipment_type'])
+            items_chips += f'<div style="background:rgba(52,152,219,0.15); padding:5px 10px; border-radius:8px; font-size:0.72rem;"><b>{short}:</b> <span style="color:#3498db; font-weight:700;">{int(it["quantity"])}</span></div>'
     else:
         items_chips = '<div style="opacity:0.6; font-size:0.75rem;">No items</div>'
 
@@ -192,42 +181,26 @@ def render_shipment_card(ship, idx):
     else:
         transport_badge = '<span style="background:#e74c3c; color:white; padding:3px 9px; border-radius:10px; font-size:0.7rem; font-weight:600; margin-top:4px; display:inline-block;">🚛 Transport Not Ready</span>'
 
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {cfg['bg']} 100%);
-                border-left: 5px solid {cfg['color']};
-                border-radius: 14px;
-                padding: 16px 18px;
-                margin-bottom: 14px;
-                box-shadow: 0 4px 16px rgba(0,0,0,0.08);">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-            <div>
-                <div style="font-size:1.05rem; font-weight:700;">
-                    🏢 {ship['rdc_name']}
-                    <span style="opacity:0.5; font-weight:500; font-size:0.78rem;">#{ship['id']}</span>
-                </div>
-                <div style="font-size:0.78rem; opacity:0.85; margin-top:3px;">
-                    📅 {ship['date']} | 📆 {scheduled_str}
-                </div>
-                <div style="font-size:0.78rem; opacity:0.85; margin-top:2px;">
-                    {receiver_line}
-                </div>
-                <div style="margin-top:4px;">{transport_badge}</div>
-            </div>
-            <div style="background:{cfg['color']}; color:white; padding:4px 10px; border-radius:20px; font-weight:700; font-size:0.72rem;">
-                {cfg['emoji']} {status}
-            </div>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-            {items_chips}
-            <div style="background:rgba(127,140,141,0.15); padding:5px 10px; border-radius:8px; font-size:0.72rem;">
-                <b>Total:</b> <span style="font-weight:700;">{total_items}</span>
-            </div>
-        </div>
-        <div style="padding-top:8px; border-top:1px dashed rgba(127,140,141,0.3); font-size:0.78rem; opacity:0.85;">
-            📝 {notes}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    html = (
+        f'<div style="background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, {cfg["bg"]} 100%); border-left: 5px solid {cfg["color"]}; border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.08);">'
+        f'<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">'
+        f'<div>'
+        f'<div style="font-size:1.05rem; font-weight:700;">🏢 {ship["rdc_name"]} <span style="opacity:0.5; font-weight:500; font-size:0.78rem;">#{ship["id"]}</span></div>'
+        f'<div style="font-size:0.78rem; opacity:0.85; margin-top:3px;">📅 {ship["date"]} | 📆 {scheduled_str}</div>'
+        f'<div style="font-size:0.78rem; opacity:0.85; margin-top:2px;">{receiver_line}</div>'
+        f'<div style="margin-top:4px;">{transport_badge}</div>'
+        f'</div>'
+        f'<div style="background:{cfg["color"]}; color:white; padding:4px 10px; border-radius:20px; font-weight:700; font-size:0.72rem;">{cfg["emoji"]} {status}</div>'
+        f'</div>'
+        f'<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">'
+        f'{items_chips}'
+        f'<div style="background:rgba(127,140,141,0.15); padding:5px 10px; border-radius:8px; font-size:0.72rem;"><b>Total:</b> <span style="font-weight:700;">{total_items}</span></div>'
+        f'</div>'
+        f'<div style="padding-top:8px; border-top:1px dashed rgba(127,140,141,0.3); font-size:0.78rem; opacity:0.85;">📝 {notes}</div>'
+        f'</div>'
+    )
+
+    st.markdown(html, unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([2, 1, 1])
     new_status = c1.selectbox(
@@ -267,12 +240,10 @@ def render():
 
     if not scheduled_df.empty:
         render_section_title(f"📅 Scheduled Shipments — Based on Launch Dates ({len(scheduled_df)})")
-        st.markdown("""
-        <div style="background: rgba(52, 152, 219, 0.1); padding: 12px 18px; border-radius: 10px; 
-                    border-left: 4px solid #3498db; margin-bottom: 16px; font-size:0.9rem;">
-            💡 Auto-suggested shipments for RDCs with upcoming launch dates. <b>Ship by = Launch Date - 1 day</b>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            '<div style="background: rgba(52, 152, 219, 0.1); padding: 12px 18px; border-radius: 10px; border-left: 4px solid #3498db; margin-bottom: 16px; font-size:0.9rem;">💡 Auto-suggested shipments for RDCs with upcoming launch dates. <b>Ship by = Launch Date - 1 day</b></div>',
+            unsafe_allow_html=True
+        )
 
         scheduled_list = list(scheduled_df.iterrows())
         for i in range(0, len(scheduled_list), 2):
